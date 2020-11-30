@@ -1,0 +1,243 @@
+package com.robomotion.app;
+
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.protobuf.Value;
+
+import io.grpc.ConnectivityState;
+import io.grpc.ManagedChannel;
+
+public class Runtime 
+{
+	private static RuntimeHelperGrpc.RuntimeHelperBlockingStub client;
+	private static Map<String, NodeFactory> factories = new HashMap<String, NodeFactory>();
+	private static Map<String, Node> nodes = new HashMap<String, Node>();
+	public static int activeNodes = 0;
+	public static Boolean started = false;
+	
+	public static void SetClient(RuntimeHelperGrpc.RuntimeHelperBlockingStub cli)
+	{
+		client = cli;
+	}
+	
+	public static void CheckRunnerConn(ManagedChannel ch) {
+		while (true) {
+			try {
+				ConnectivityState state = ch.getState(true);
+				
+				switch (state) {
+				case CONNECTING:
+				case IDLE:
+				case READY:
+					break;
+					
+				default:
+					App.latch.countDown();
+					return;
+				}
+				Thread.sleep(1000);
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+	}
+
+	public static void CreateNode(String name, NodeFactory factory)
+	{
+		factories.put(name, factory);
+	}
+	
+	public static Map<String, NodeFactory> Factories()
+	{
+		return factories;
+	}
+	
+	public static void AddNode(String guid, Node node)
+	{
+		nodes.put(guid, node);
+	}
+	
+	public static Map<String, Node> Nodes()
+	{
+		return nodes;
+	}
+
+	public static byte[] Compress(byte[] data) 
+	{
+		try {
+			OutputStream stream = new ByteArrayOutputStream();
+			GZIPOutputStream gos = new GZIPOutputStream(stream);
+			gos.write(data);
+			gos.close();
+			
+			return stream.toString().getBytes();
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		return null;
+	}
+	
+	public static byte[] Decompress(byte[] data) 
+	{
+		try {
+			InputStream stream = new ByteArrayInputStream(data);
+			GZIPInputStream gis = new GZIPInputStream(stream);
+			OutputStream os = new ByteArrayOutputStream();
+			
+			byte[] buffer = new byte[1024];
+			int len;
+			while ((len = gis.read(buffer)) != -1) {
+				os.write(buffer, 0, len);
+			}
+			
+			stream.close();
+			gis.close();
+			
+			return os.toString().getBytes();
+		} catch (Exception e) {
+			// TODO: handle exception
+		}
+		return null;
+	}
+	
+	public static byte[] Serialize(Object object) {
+		try {
+			return (new ObjectMapper()).writeValueAsBytes(object);
+		} catch (JsonProcessingException e) {
+			return null;
+		}
+	}
+	
+	public static <T> T Deserialize(byte[] data, Class<T> classOfT) {
+		Gson g = new Gson();
+		return g.fromJson(new String(data, StandardCharsets.UTF_8), classOfT);
+	}
+	
+	public static void Close()
+	{
+		if (client == null) return;
+		Empty request = Empty.newBuilder().build();
+		client.close(request);
+	}
+	
+	public static <T> T GetVariable(Variable variable, Context ctx)
+	{
+		if (variable.scope.compareTo("Custom") == 0) return (T) variable.name;
+		if (variable.scope.compareTo("Message") == 0) 
+		{
+			Map<String, Object> msg = new HashMap<String, Object>();
+			msg = Runtime.Deserialize(ctx.GetRaw(), msg.getClass());
+			return (T) msg.get(variable.name);
+		}
+		
+		if (client == null) return null;
+		
+		com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder()
+				.setScope(variable.scope)
+				.setName(variable.name)
+				.build();
+				
+		GetVariableRequest request = GetVariableRequest.newBuilder()
+				.setVariable(var)
+				.build();
+		
+		GetVariableResponse response = client.getVariable(request);
+		Struct st = new Struct(response.getValue());
+		return (T) st.Parse();
+	}
+	
+	public static <T> void SetVariable(Variable variable, Context ctx, T value)
+	{
+		if (variable.scope.compareTo("Message") == 0) {
+			ctx.Set(variable.name, value);
+		}
+		
+		if (client == null) return;
+		
+		Value val = Struct.ToValue(value);
+		com.google.protobuf.Struct st = com.google.protobuf.Struct.newBuilder()
+				.putFields("value", val).build();
+		
+		com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder()
+				.setScope(variable.scope)
+				.setName(variable.name)
+				.build();
+		
+		SetVariableRequest request = SetVariableRequest.newBuilder()
+				.setVariable(var)
+				.setValue(st)
+				.build();
+		
+		client.setVariable(request);
+	}
+	
+
+	public static class Variable <T> {
+		public String scope;
+		public String name;
+		public Variable(String scope, String name) {this.scope = scope; this.name = name;}
+	}
+	
+	public class InVariable<T> extends Variable<T> {
+		public InVariable(String scope, String name) {
+			super(scope, name);
+		}
+
+	    public T Get(Context ctx) {
+			return Runtime.GetVariable(this, ctx);
+		}
+	}
+	
+	public class OutVariable<T> extends Variable <T> {
+		
+		public OutVariable(String scope, String name) {
+			super(scope, name);
+		}
+		
+		public void Set(Context ctx, T value) {
+			Runtime.SetVariable(this, ctx, value);
+		}
+	}
+	
+	public class OptVariable<T> extends Variable <T> {
+		public OptVariable(String scope, String name) {
+			super(scope, name);
+		}
+		
+		public T Get(Context ctx) {
+			return Runtime.GetVariable(this, ctx);
+		}
+	}
+	
+	public static class Credential {
+		public String vaultId;
+		public String itemId;
+		public Credential(String vaultId, String itemId) { this.vaultId = vaultId; this.itemId = itemId; }
+
+		public Map<String, Object> Get()
+		{
+			Map<String, Object> item = new HashMap<String, Object>();
+			if (client == null || this.itemId == null || this.vaultId == null) return item;
+
+			GetVaultItemRequest request = GetVaultItemRequest.newBuilder()
+					.setItemId(this.itemId)
+					.setVaultId(this.vaultId)
+					.build();
+
+			GetVaultItemResponse response = client.getVaultItem(request);
+			Struct st = new Struct(response.getItem());
+			return (Map<String, Object>) st.Parse();
+		}
+	}
+}
