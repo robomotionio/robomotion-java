@@ -130,11 +130,16 @@ public class Spec {
 					inObject.put("type", parts[parts.length - 1].toLowerCase());
 					inObject.put("title", GetTitle(input));
 
-					String description = GetDescription(input);
-					if (description != "")
-						inObject.put("description", description);
-
 					String name = LowerFirstLetter(input.getName());
+					String description = GetDescription(input);
+					if (description != "") {
+						inObject.put("description", description);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "input");
+							}
+						});
+					}
 
 					if (IsHidden(input)) {
 						pUISchema.put(name, new JObject() {
@@ -231,11 +236,16 @@ public class Spec {
 					outObject.put("type", parts[parts.length - 1].toLowerCase());
 					outObject.put("title", GetTitle(output));
 
-					String description = GetDescription(output);
-					if (description != "")
-						outObject.put("description", description);
-
 					String name = LowerFirstLetter(output.getName());
+					String description = GetDescription(output);
+					if (description != "") {
+						outObject.put("description", description);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "input");
+							}
+						});
+					}
 
 					if (IsHidden(output)) {
 						pUISchema.put(name, new JObject() {
@@ -342,11 +352,16 @@ public class Spec {
 						optObject.put("enumNames", enumNames);
 					}
 
-					String description = GetDescription(option);
-					if (description != "")
-						optObject.put("description", description);
-
 					String name = LowerFirstLetter(option.getName());
+					String description = GetDescription(option);
+					if (description != "") {
+						optObject.put("description", description);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "input");
+							}
+						});
+					}
 
 					if (Credential.class.isAssignableFrom(option.getType())) {
 						optObject.put("subtitle", GetTitle(option));
