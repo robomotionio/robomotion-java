@@ -44,7 +44,7 @@ public class App {
 					attached = true;
 				} else if (arg.compareTo("-s") == 0) { // generate spec file
 					Spec.GenerateSpec(name, version);
-					return;
+					System.exit(0);
 				}
 			}
 
