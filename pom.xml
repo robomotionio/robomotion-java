@@ -3,12 +3,12 @@
 	<groupId>com.robomotion.app</groupId>
 	<artifactId>robomotion</artifactId>
 	<packaging>jar</packaging>
-	<version>1.3</version>
+	<version>1.4.1</version>
 	<name>java-lib</name>
 	<url>http://maven.apache.org</url>
 	<properties>
-		<maven.compiler.source>1.6</maven.compiler.source>
-		<maven.compiler.target>1.6</maven.compiler.target>
+		<maven.compiler.source>1.7</maven.compiler.source>
+		<maven.compiler.target>1.7</maven.compiler.target>
 	</properties>
 	<build>
 		<extensions>

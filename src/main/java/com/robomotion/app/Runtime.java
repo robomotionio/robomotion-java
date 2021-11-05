@@ -35,14 +35,14 @@ public class Runtime {
 				ConnectivityState state = ch.getState(true);
 
 				switch (state) {
-					case CONNECTING:
-					case IDLE:
-					case READY:
-						break;
+				case CONNECTING:
+				case IDLE:
+				case READY:
+					break;
 
-					default:
-						App.latch.countDown();
-						return;
+				default:
+					App.latch.countDown();
+					return;
 				}
 				Thread.sleep(1000);
 			} catch (Exception e) {
@@ -172,7 +172,7 @@ public class Runtime {
 		}
 	}
 
-	public class InVariable<T> extends Variable<T> {
+	public static class InVariable<T> extends Variable<T> {
 		public InVariable(String scope, String name) {
 			super(scope, name);
 		}
@@ -182,7 +182,7 @@ public class Runtime {
 		}
 	}
 
-	public class OutVariable<T> extends Variable<T> {
+	public static class OutVariable<T> extends Variable<T> {
 
 		public OutVariable(String scope, String name) {
 			super(scope, name);
@@ -193,7 +193,7 @@ public class Runtime {
 		}
 	}
 
-	public class OptVariable<T> extends Variable<T> {
+	public static class OptVariable<T> extends Variable<T> {
 		public OptVariable(String scope, String name) {
 			super(scope, name);
 		}
@@ -204,25 +204,56 @@ public class Runtime {
 	}
 
 	public static class Credential {
+		public String scope;
+		public Object name;
+
+		@Deprecated
 		public String vaultId;
+		@Deprecated
 		public String itemId;
 
-		public Credential(String vaultId, String itemId) {
+		public Credential(String scope, Object name, String vaultId, String itemId) {
+			this.scope = scope;
+			this.name = name;
 			this.vaultId = vaultId;
 			this.itemId = itemId;
 		}
 
-		public Map<String, Object> Get() {
+		public Map<String, Object> Get(Context ctx) {
 			Map<String, Object> item = new HashMap<String, Object>();
-			if (client == null || this.itemId == null || this.vaultId == null)
+			if (client == null)
 				return item;
 
-			GetVaultItemRequest request = GetVaultItemRequest.newBuilder().setItemId(this.itemId)
-					.setVaultId(this.vaultId).build();
+			_credential creds;
+			if (this.vaultId != null && this.itemId != null) {
+				creds = new _credential(this.vaultId, this.itemId);
+			} else {
+				Object cr = this.name;
+				if (this.scope == "Message") {
+					InVariable<Object> v = new InVariable<Object>(this.scope, this.name.toString());
+					cr = v.Get(ctx);
+				}
+
+				Map<String, Object> crMap = (Map<String, Object>) cr;
+				creds = new _credential((String) crMap.get("vaultId"), (String) crMap.get("itemId"));
+			}
+
+			GetVaultItemRequest request = GetVaultItemRequest.newBuilder().setItemId(creds.itemId)
+					.setVaultId(creds.vaultId).build();
 
 			GetVaultItemResponse response = client.getVaultItem(request);
 			Struct st = new Struct(response.getItem());
 			return (Map<String, Object>) st.Parse();
+		}
+	}
+
+	private static class _credential {
+		public String vaultId;
+		public String itemId;
+
+		public _credential(String vaultId, String itemId) {
+			this.vaultId = vaultId;
+			this.itemId = itemId;
 		}
 	}
 }

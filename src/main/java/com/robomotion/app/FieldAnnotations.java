@@ -23,6 +23,12 @@ public @interface FieldAnnotations {
 
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.FIELD)
+	public @interface Format {
+		String format() default "";
+	}
+
+	@Retention(RetentionPolicy.RUNTIME)
+	@Target(ElementType.FIELD)
 	public @interface MessageScope {
 		boolean messageScope() default true;
 	}

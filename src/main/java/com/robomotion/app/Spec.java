@@ -66,14 +66,13 @@ public class Spec {
 
 				JObject pSchema = new JObject();
 				JObject pUISchema = new JObject();
-				JObject pFormData = new JObject();
+				JObject formData = new JObject();
 
 				pSchema.put("title", "Input");
 				pSchema.put("type", "object");
 
 				JObject inProperties = new JObject();
 				JArray uiOrder = new JArray();
-				JObject formData = new JObject();
 
 				for (Field input : inputVars) {
 					JObject inObject = new JObject();
@@ -111,16 +110,25 @@ public class Spec {
 						inObject.put("description", description);
 
 					String name = LowerFirstLetter(input.getName());
+					final String format = GetFormat(input);
+					if (format != "") {
+						inObject.put("format", format);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", format);
+							}
+						});
+					} else {
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "variable");
+							}
+						});
+					}
 
 					formData.put(name, GetDefault(input));
 					inProperties.put(name, inObject);
 					uiOrder.add(name);
-
-					pUISchema.put(name, new JObject() {
-						{
-							put("ui:field", "variable");
-						}
-					});
 				}
 
 				for (Field input : inputs) {
@@ -149,6 +157,16 @@ public class Spec {
 						});
 					}
 
+					final String format = GetFormat(input);
+					if (format != "") {
+						inObject.put("format", format);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", format);
+							}
+						});
+					}
+
 					formData.put(name, GetDefault(input));
 					inProperties.put(name, inObject);
 					uiOrder.add(name);
@@ -172,14 +190,13 @@ public class Spec {
 
 				JObject pSchema = new JObject();
 				JObject pUISchema = new JObject();
-				JObject pFormData = new JObject();
+				JObject formData = new JObject();
 
 				pSchema.put("title", "Output");
 				pSchema.put("type", "object");
 
 				JObject outProperties = new JObject();
 				JArray uiOrder = new JArray();
-				JObject formData = new JObject();
 
 				for (Field output : outputVars) {
 					JObject outObject = new JObject();
@@ -278,14 +295,13 @@ public class Spec {
 
 				JObject pSchema = new JObject();
 				JObject pUISchema = new JObject();
-				JObject pFormData = new JObject();
+				JObject formData = new JObject();
 
 				pSchema.put("title", "Options");
 				pSchema.put("type", "object");
 
 				JObject optProperties = new JObject();
 				JArray uiOrder = new JArray();
-				JObject formData = new JObject();
 
 				for (Field option : optionVars) {
 					JObject optObject = new JObject();
@@ -323,16 +339,25 @@ public class Spec {
 						optObject.put("description", description);
 
 					String name = LowerFirstLetter(option.getName());
+					final String format = GetFormat(option);
+					if (format != "") {
+						optObject.put("format", format);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", format);
+							}
+						});
+					} else {
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "variable");
+							}
+						});
+					}
 
 					formData.put(name, GetDefault(option));
 					optProperties.put(name, optObject);
 					uiOrder.add(name);
-
-					pUISchema.put(name, new JObject() {
-						{
-							put("ui:field", "variable");
-						}
-					});
 				}
 
 				for (Field option : options) {
@@ -363,25 +388,60 @@ public class Spec {
 						});
 					}
 
+					final String format = GetFormat(option);
+					if (format != "") {
+						optObject.put("format", format);
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", format);
+							}
+						});
+					}
+
 					if (Credential.class.isAssignableFrom(option.getType())) {
 						optObject.put("subtitle", GetTitle(option));
 						optObject.put("properties", new JObject() {
 							{
-								put("vaultId", new JObject() {
+								put("scope", new JObject() {
 									{
 										put("type", "string");
 									}
 								});
-								put("itemId", new JObject() {
+								put("name", new JObject() {
 									{
-										put("type", "string");
+										put("type", "object");
+										put("properties", new JObject() {
+											{
+												put("vaultId", new JObject() {
+													{
+														put("type", "string");
+													}
+												});
+												put("itemId", new JObject() {
+													{
+														put("type", "string");
+													}
+												});
+											}
+										});
+									}
+								});
+							}
+						});
+						formData.put(name, new JObject() {
+							{
+								put("scope", "Custom");
+								put("name", new JObject() {
+									{
+										put("vaultId", "_");
+										put("itemId", "_");
 									}
 								});
 							}
 						});
 						pUISchema.put(name, new JObject() {
 							{
-								put("ui:field", "credentials");
+								put("ui:field", "vault");
 							}
 						});
 					}
@@ -641,6 +701,11 @@ public class Spec {
 	public static String GetDescription(Field f) {
 		FieldAnnotations.Description annotation = f.getAnnotation(FieldAnnotations.Description.class);
 		return annotation == null ? "" : annotation.description();
+	}
+
+	public static String GetFormat(Field f) {
+		FieldAnnotations.Format annotation = f.getAnnotation(FieldAnnotations.Format.class);
+		return annotation == null ? "" : annotation.format();
 	}
 
 	public static boolean IsInput(Field f) {
