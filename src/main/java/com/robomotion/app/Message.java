@@ -1,5 +1,6 @@
 package com.robomotion.app;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -31,7 +32,7 @@ public class Message implements Context {
 	}
 
 	public <T> T Get(String key, Class<T> cls) {
-		DocumentContext docCtx = JsonPath.parse(new String(data));
+		DocumentContext docCtx = JsonPath.parse(new String(data, StandardCharsets.UTF_8));
 		JsonPath jsonPath = JsonPath.compile("$." + key);
 		return (T) docCtx.read(jsonPath);
 	}
