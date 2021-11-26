@@ -400,6 +400,8 @@ public class Spec {
 
 					if (Credential.class.isAssignableFrom(option.getType())) {
 						optObject.put("subtitle", GetTitle(option));
+						optObject.put("customScope", true);
+						optObject.put("messageScope", true);
 						optObject.put("properties", new JObject() {
 							{
 								put("scope", new JObject() {
