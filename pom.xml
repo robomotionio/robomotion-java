@@ -3,7 +3,7 @@
 	<groupId>com.robomotion.app</groupId>
 	<artifactId>robomotion</artifactId>
 	<packaging>jar</packaging>
-	<version>1.4.3</version>
+	<version>1.4.4</version>
 	<name>java-lib</name>
 	<url>http://maven.apache.org</url>
 	<properties>

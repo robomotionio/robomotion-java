@@ -229,7 +229,7 @@ public class Runtime {
 				creds = new _credential(this.vaultId, this.itemId);
 			} else {
 				Object cr = this.name;
-				if (this.scope == "Message") {
+				if (this.scope.compareTo("Message") == 0) {
 					InVariable<Object> v = new InVariable<Object>(this.scope, this.name.toString());
 					cr = v.Get(ctx);
 				}
