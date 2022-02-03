@@ -120,16 +120,3 @@ message SetVariableRequest {
     Variable variable = 1;
     google.protobuf.Struct value = 2;
 }
-
-service Debug {
-    rpc Attach(AttachRequest) returns (Empty);
-    rpc Detach(DetachRequest) returns (Empty);
-}
-
-message AttachRequest {
-    bytes config = 1;
-}
-
-message DetachRequest {
-    string namespace = 1;
-}

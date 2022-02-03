@@ -1,0 +1,54 @@
+syntax = "proto3";
+package proto;
+option go_package="robomotion/robomotion-runner/robot/proto";
+option java_package = "com.robomotion.app";
+option java_outer_classname = "RunnerProto";
+
+service Runner {
+    rpc Init(InitRunnerRequest) returns (Null);
+    rpc Run(RunRequest) returns (Null);
+    rpc Clear(Null) returns(Null);
+    rpc RobotName(Null) returns(RobotNameResponse);
+}
+
+message Null {
+}
+
+message InitRunnerRequest {
+    string apiUrl = 1;
+    string token = 2;
+    uint32 robot_server = 3;
+    uint32 natsPort = 4;
+    string robot_name = 5;
+}
+
+message RunRequest {
+    string repoid = 1;
+    string repository = 2;
+    string namespace = 3;
+    string version = 4;
+}
+
+message RobotNameResponse {
+    string robot_name = 1;
+}
+
+service RobotHelper {
+
+}
+
+service Debug {
+    rpc Attach(AttachRequest) returns (Nil);
+    rpc Detach(DetachRequest) returns (Nil);
+}
+
+message Nil {
+}
+
+message AttachRequest {
+    bytes config = 1;
+}
+
+message DetachRequest {
+    string namespace = 1;
+}

@@ -35,14 +35,14 @@ public class Runtime {
 				ConnectivityState state = ch.getState(true);
 
 				switch (state) {
-				case CONNECTING:
-				case IDLE:
-				case READY:
-					break;
+					case CONNECTING:
+					case IDLE:
+					case READY:
+						break;
 
-				default:
-					App.latch.countDown();
-					return;
+					default:
+						App.latch.countDown();
+						return;
 				}
 				Thread.sleep(1000);
 			} catch (Exception e) {
