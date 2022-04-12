@@ -133,7 +133,8 @@ public class Debug {
 		List<SockTabEntry> tabs = new ArrayList<SockTabEntry>();
 
 		try {
-			Process process = java.lang.Runtime.getRuntime().exec(new String[] { "netstat", "-a", "-n", "-o" });
+			Process process = java.lang.Runtime.getRuntime()
+					.exec(new String[] { "netstat", "-a", "-n", "-o", "-p", "tcp" });
 			Scanner sc = new Scanner(process.getInputStream(), "IBM850");
 			sc.useDelimiter("\\A");
 			String content = sc.next();
