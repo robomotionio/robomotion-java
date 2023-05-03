@@ -77,9 +77,8 @@ public class Spec {
 				JArray uiOrder = new JArray();
 
 				for (Field input : inputVars) {
-					String[] arrFields = GetArrayFields(input);
-
 					JObject inObject = new JObject();
+					String[] arrFields = GetArrayFields(input);
 
 					if (arrFields != null) {
 						inObject.put("type", "array");
@@ -122,23 +121,23 @@ public class Spec {
 
 					} else {
 						inObject.put("type", "object");
+						inObject.put("properties", new JObject() {
+							{
+								put("scope", new JObject() {
+									{
+										put("type", "string");
+									}
+								});
+								put("name", new JObject() {
+									{
+										put("type", "string");
+									}
+								});
+							}
+						});
 					}
 
 					inObject.put("title", GetTitle(input));
-					inObject.put("properties", new JObject() {
-						{
-							put("scope", new JObject() {
-								{
-									put("type", "string");
-								}
-							});
-							put("name", new JObject() {
-								{
-									put("type", "string");
-								}
-							});
-						}
-					});
 
 					String varType = ((ParameterizedType) input.getGenericType()).getActualTypeArguments()[0]
 							.toString();
@@ -352,22 +351,66 @@ public class Spec {
 
 				for (Field option : optionVars) {
 					JObject optObject = new JObject();
-					optObject.put("type", "object");
-					optObject.put("title", GetTitle(option));
-					optObject.put("properties", new JObject() {
-						{
-							put("scope", new JObject() {
+					String[] arrFields = GetArrayFields(option);
+
+					if (arrFields != null) {
+						optObject.put("type", "array");
+
+						JObject arrProps = new JObject();
+						for (String arrField : arrFields) {
+							arrProps.put(ToSnakeCase(arrField), new JObject() {
 								{
 									put("type", "string");
 								}
-							});
-							put("name", new JObject() {
 								{
-									put("type", "string");
+									put("title", arrField);
 								}
 							});
 						}
-					});
+
+						optObject.put("items", new JObject() {
+							{
+								put("type", "object");
+							}
+							{
+								put("properties", new JObject() {
+									{
+										put("scope", new JObject() {
+											{
+												put("type", "string");
+											}
+										});
+									}
+									{
+										put("name", new JObject() {
+											{
+												put("properties", arrProps);
+											}
+										});
+									}
+								});
+							}
+						});
+
+					} else {
+						optObject.put("type", "object");
+						optObject.put("properties", new JObject() {
+							{
+								put("scope", new JObject() {
+									{
+										put("type", "string");
+									}
+								});
+								put("name", new JObject() {
+									{
+										put("type", "string");
+									}
+								});
+							}
+						});
+					}
+
+					optObject.put("title", GetTitle(option));
 
 					String varType = ((ParameterizedType) option.getGenericType()).getActualTypeArguments()[0]
 							.toString();
