@@ -9,6 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.commons.text.CaseUtils;
+
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -54,7 +56,7 @@ public class Spec {
 			node.put("outputs", GetOutputCount(c));
 
 			String editor = GetEditor(c);
-			if (editor != "")
+			if (!editor.isEmpty())
 				node.put("editor", editor);
 
 			final JArray properties = new JArray();
@@ -75,8 +77,53 @@ public class Spec {
 				JArray uiOrder = new JArray();
 
 				for (Field input : inputVars) {
+					String[] arrFields = GetArrayFields(input);
+
 					JObject inObject = new JObject();
-					inObject.put("type", "object");
+
+					if (arrFields != null) {
+						inObject.put("type", "array");
+
+						JObject arrProps = new JObject();
+						for (String arrField : arrFields) {
+							arrProps.put(ToSnakeCase(arrField), new JObject() {
+								{
+									put("type", "string");
+								}
+								{
+									put("title", arrField);
+								}
+							});
+						}
+
+						inObject.put("items", new JObject() {
+							{
+								put("type", "object");
+							}
+							{
+								put("properties", new JObject() {
+									{
+										put("scope", new JObject() {
+											{
+												put("type", "string");
+											}
+										});
+									}
+									{
+										put("name", new JObject() {
+											{
+												put("properties", arrProps);
+											}
+										});
+									}
+								});
+							}
+						});
+
+					} else {
+						inObject.put("type", "object");
+					}
+
 					inObject.put("title", GetTitle(input));
 					inObject.put("properties", new JObject() {
 						{
@@ -594,12 +641,12 @@ public class Spec {
 
 	public static int GetInputCount(Class<?> c) {
 		NodeAnnotations.Inputs annotation = c.getAnnotation(NodeAnnotations.Inputs.class);
-		return annotation == null ? 0 : annotation.inputs();
+		return annotation == null ? 1 : annotation.inputs();
 	}
 
 	public static int GetOutputCount(Class<?> c) {
 		NodeAnnotations.Outputs annotation = c.getAnnotation(NodeAnnotations.Outputs.class);
-		return annotation == null ? 0 : annotation.outputs();
+		return annotation == null ? 1 : annotation.outputs();
 	}
 
 	public static List<Field> GetInputs(Class<?> c) {
@@ -804,5 +851,15 @@ public class Spec {
 		enumeration = g.fromJson(namesJson, enumeration.getClass());
 
 		return enumeration.toArray();
+	}
+
+	public static String[] GetArrayFields(Field f) {
+		FieldAnnotations.ArrayFields annotation = f.getAnnotation(FieldAnnotations.ArrayFields.class);
+		return annotation == null ? null : annotation.arrayFields().split("|");
+	}
+
+	private static String ToSnakeCase(String text) {
+		return CaseUtils.toCamelCase(text, false, ' ')
+				.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase();
 	}
 }
