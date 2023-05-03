@@ -116,14 +116,15 @@ public class Runtime {
 		return g.fromJson(new String(data, StandardCharsets.UTF_8), classOfT);
 	}
 
-	public static void Close() {
+	public static void Close() throws RuntimeNotInitializedException {
 		if (client == null)
-			return;
+			throw new RuntimeNotInitializedException();
+
 		Empty request = Empty.newBuilder().build();
 		client.close(request);
 	}
 
-	public static <T> T GetVariable(Variable variable, Context ctx) {
+	public static <T> T GetVariable(Variable variable, Context ctx) throws RuntimeNotInitializedException {
 		if (variable.scope.compareTo("Custom") == 0)
 			return (T) variable.name;
 		if (variable.scope.compareTo("Message") == 0) {
@@ -131,7 +132,7 @@ public class Runtime {
 		}
 
 		if (client == null)
-			return null;
+			throw new RuntimeNotInitializedException();
 
 		com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder().setScope(variable.scope)
 				.setName(variable.name).build();
@@ -143,13 +144,13 @@ public class Runtime {
 		return (T) st.Parse();
 	}
 
-	public static <T> void SetVariable(Variable variable, Context ctx, T value) {
+	public static <T> void SetVariable(Variable variable, Context ctx, T value) throws RuntimeNotInitializedException {
 		if (variable.scope.compareTo("Message") == 0) {
 			ctx.Set(variable.name, value);
 		}
 
 		if (client == null)
-			return;
+			throw new RuntimeNotInitializedException();
 
 		Value val = Struct.ToValue(value);
 		com.google.protobuf.Struct st = com.google.protobuf.Struct.newBuilder().putFields("value", val).build();
@@ -160,6 +161,22 @@ public class Runtime {
 		SetVariableRequest request = SetVariableRequest.newBuilder().setVariable(var).setValue(st).build();
 
 		client.setVariable(request);
+	}
+
+	public static Map<String, Object> GetRobotInfo() throws RuntimeNotInitializedException {
+		if (client == null)
+			throw new RuntimeNotInitializedException();
+
+		Empty request = Empty.newBuilder().build();
+		GetRobotInfoResponse response = client.getRobotInfo(request);
+
+		Struct st = new Struct(response.getRobot());
+		return (Map<String, Object>) st.Parse();
+	}
+
+	public static String GetRobotVersion() throws RuntimeNotInitializedException {
+		Map<String, Object> info = GetRobotInfo();
+		return info.get("version").toString();
 	}
 
 	public static class Variable<T> {
@@ -177,7 +194,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public T Get(Context ctx) {
+		public T Get(Context ctx) throws RuntimeNotInitializedException {
 			return Runtime.GetVariable(this, ctx);
 		}
 	}
@@ -188,7 +205,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public void Set(Context ctx, T value) {
+		public void Set(Context ctx, T value) throws RuntimeNotInitializedException {
 			Runtime.SetVariable(this, ctx, value);
 		}
 	}
@@ -198,7 +215,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public T Get(Context ctx) {
+		public T Get(Context ctx) throws RuntimeNotInitializedException {
 			return Runtime.GetVariable(this, ctx);
 		}
 	}
@@ -219,10 +236,9 @@ public class Runtime {
 			this.itemId = itemId;
 		}
 
-		public Map<String, Object> Get(Context ctx) {
-			Map<String, Object> item = new HashMap<String, Object>();
+		public Map<String, Object> Get(Context ctx) throws RuntimeNotInitializedException {
 			if (client == null)
-				return item;
+				throw new RuntimeNotInitializedException();
 
 			_credential creds;
 			if (this.vaultId != null && this.itemId != null) {
