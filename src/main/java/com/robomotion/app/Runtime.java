@@ -13,6 +13,7 @@ import java.util.zip.GZIPOutputStream;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Value;
 
 import io.grpc.ConnectivityState;
@@ -258,6 +259,32 @@ public class Runtime {
 					.setVaultId(creds.vaultId).build();
 
 			GetVaultItemResponse response = client.getVaultItem(request);
+			Struct st = new Struct(response.getItem());
+			return (Map<String, Object>) st.Parse();
+		}
+
+		public Map<String, Object> Set(Context ctx, byte[] data) throws RuntimeNotInitializedException {
+			if (client == null)
+				throw new RuntimeNotInitializedException();
+
+			_credential creds;
+			if (this.vaultId != null && this.itemId != null) {
+				creds = new _credential(this.vaultId, this.itemId);
+			} else {
+				Object cr = this.name;
+				if (this.scope.compareTo("Message") == 0) {
+					InVariable<Object> v = new InVariable<Object>(this.scope, this.name.toString());
+					cr = v.Get(ctx);
+				}
+
+				Map<String, Object> crMap = (Map<String, Object>) cr;
+				creds = new _credential((String) crMap.get("vaultId"), (String) crMap.get("itemId"));
+			}
+
+			SetVaultItemRequest request = SetVaultItemRequest.newBuilder().setVaultId(creds.vaultId)
+					.setItemId(creds.itemId).setData(ByteString.copyFrom(data)).build();
+
+			SetVaultItemResponse response = client.setVaultItem(request);
 			Struct st = new Struct(response.getItem());
 			return (Map<String, Object>) st.Parse();
 		}
