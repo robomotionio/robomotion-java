@@ -30,6 +30,10 @@ public class Runtime {
 		client = cli;
 	}
 
+	public static RuntimeHelperGrpc.RuntimeHelperBlockingStub GetClient() {
+		return client;
+	}
+
 	public static void CheckRunnerConn(ManagedChannel ch) {
 		while (true) {
 			try {
