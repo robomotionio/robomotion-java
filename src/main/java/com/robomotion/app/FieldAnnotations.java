@@ -95,6 +95,12 @@ public @interface FieldAnnotations {
 		ECategory category() default ECategory.Null;
 	}
 
+	@Retention(RetentionPolicy.RUNTIME)
+	@Target(ElementType.FIELD)
+	public @interface ArrayFields {
+		String arrayFields() default "";
+	}
+
 	public enum ECategory {
 		Null(0), Login(1), Email(2), CreditCard(3), Token(4), Database(5), Document(6);
 

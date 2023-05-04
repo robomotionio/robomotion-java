@@ -40,4 +40,12 @@ public class Message implements Context {
 	public byte[] GetRaw() {
 		return this.data;
 	}
+
+	public void SetRaw(byte[] data) {
+		this.data = data;
+	}
+
+	public boolean IsEmpty() {
+		return this.data == null || this.data.length == 0;
+	}
 }

@@ -5,7 +5,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.google.protobuf.ByteString;
 import com.robomotion.app.RunnerGrpc.RunnerBlockingStub;
@@ -48,11 +47,10 @@ public class Debug {
 		AttachConfig cfg = new AttachConfig(ProtocolGRPC, gAddr, pid, ns);
 
 		byte[] cfgData = Runtime.Serialize(cfg);
-		
+
 		try {
 			attachedTo = GetRPCAddr();
-		}
-		catch (Exception e) {
+		} catch (Exception e) {
 			System.out.println(e.toString());
 			System.exit(0);
 		}
@@ -86,6 +84,8 @@ public class Debug {
 
 	private static String GetRPCAddr() throws Exception {
 		List<SockTabEntry> tabs = GetNetStatPorts(State.LISTENING, "robomotion-runner");
+		tabs = FilterTabs(tabs);
+
 		switch (tabs.size()) {
 			case 0:
 				return "";
@@ -96,14 +96,28 @@ public class Debug {
 		}
 	}
 
+	private static List<SockTabEntry> FilterTabs(List<SockTabEntry> tabs) {
+		List<SockTabEntry> filtered = new ArrayList<>();
+
+		for (SockTabEntry sockTabEntry : tabs) {
+			String addr = sockTabEntry.localAddress;
+			try {
+				sockTabEntry.robotName = GetRobotName(addr);
+				filtered.add(sockTabEntry);
+			} catch (Exception e) {
+				System.out.println(e.getMessage());
+			}
+		}
+
+		return filtered;
+	}
+
 	private static String SelectTab(List<SockTabEntry> tabs) {
 		int count = tabs.size();
 
 		String robots = "";
 		for (int i = 0; i < count; i++) {
-			String addr = tabs.get(i).localAddress;
-			String name = GetRobotName(addr);
-			robots += String.format("%d) %s\n", i + 1, name);
+			robots += String.format("%d) %s\n", i + 1, tabs.get(i).robotName);
 		}
 
 		int selected = 0;
@@ -141,18 +155,17 @@ public class Debug {
 	};
 
 	private static String[] statesUnix = {
-			"UNKNOWN", "CLOSED", "LISTEN", "SYN_SENT", "SYN_RECV", "ESTABLISHED", "FIN_WAIT1", "FIN_WAIT2", "CLOSE_WAIT",
+			"UNKNOWN", "CLOSED", "LISTEN", "SYN_SENT", "SYN_RECV", "ESTABLISHED", "FIN_WAIT1", "FIN_WAIT2",
+			"CLOSE_WAIT",
 			"CLOSING", "LAST_ACK", "TIME_WAIT", "DELETE_TCB",
 	};
 
 	public static List<SockTabEntry> GetNetStatPorts(State state, String processName) throws Exception {
 		if (SystemUtils.IS_OS_WINDOWS) {
 			return getNetStatPortsWin(state, processName);
-		}
-		else if (SystemUtils.IS_OS_UNIX) {
+		} else if (SystemUtils.IS_OS_UNIX) {
 			return getNetStatPortsUnix(state, processName);
-		}
-		else if (SystemUtils.IS_OS_MAC) {
+		} else if (SystemUtils.IS_OS_MAC) {
 			return getNetStatPortsDarwin(state, processName);
 		}
 
@@ -184,7 +197,8 @@ public class Debug {
 					continue;
 
 				String pid = tokens[5];
-				List<ProcessInfo> procs = processList.stream().filter(p -> p.getPid().compareTo(pid) == 0).collect(Collectors.toList());
+				List<ProcessInfo> procs = processList.stream().filter(p -> p.getPid().compareTo(pid) == 0)
+						.collect(Collectors.toList());
 
 				if (tokens.length > 4 && tokens[1].compareTo("TCP") == 0 &&
 						tokens[4].compareTo(statesWin[state.ordinal()]) == 0 &&
@@ -221,9 +235,9 @@ public class Debug {
 			JProcesses jp = JProcesses.get();
 			jp.fastMode(true);
 
-            if (processName.length() > 15) {
-                processName = processName.substring(0, 15);
-            }
+			if (processName.length() > 15) {
+				processName = processName.substring(0, 15);
+			}
 
 			List<ProcessInfo> processList = jp.listProcesses(processName);
 			String[] rows = content.split("\n");
@@ -242,7 +256,8 @@ public class Debug {
 				}
 
 				String pid = pidStr[0];
-				List<ProcessInfo> procs = processList.stream().filter(p -> p.getPid().compareTo(pid) == 0).collect(Collectors.toList());
+				List<ProcessInfo> procs = processList.stream().filter(p -> p.getPid().compareTo(pid) == 0)
+						.collect(Collectors.toList());
 
 				if (tokens[0].compareTo("tcp") == 0 &&
 						tokens[5].compareTo(statesUnix[state.ordinal()]) == 0 &&
@@ -279,9 +294,9 @@ public class Debug {
 			JProcesses jp = JProcesses.get();
 			jp.fastMode(true);
 
-            if (processName.length() > 15) {
-                processName = processName.substring(0, 15);
-            }
+			if (processName.length() > 15) {
+				processName = processName.substring(0, 15);
+			}
 
 			List<ProcessInfo> processList = jp.listProcesses(processName);
 			String[] rows = content.split("\n");
@@ -295,7 +310,8 @@ public class Debug {
 					continue;
 
 				String pid = tokens[8];
-				List<ProcessInfo> procs = processList.stream().filter(p -> p.getPid().compareTo(pid) == 0).collect(Collectors.toList());
+				List<ProcessInfo> procs = processList.stream().filter(p -> p.getPid().compareTo(pid) == 0)
+						.collect(Collectors.toList());
 
 				if (tokens[0].compareTo("tcp4") == 0 &&
 						tokens[5].compareTo(statesUnix[state.ordinal()]) == 0 &&
@@ -321,5 +337,6 @@ public class Debug {
 	public static class SockTabEntry {
 		public ProcessInfo process;
 		public String localAddress;
+		public String robotName;
 	}
 }
