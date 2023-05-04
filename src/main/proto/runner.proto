@@ -20,6 +20,7 @@ message InitRunnerRequest {
     uint32 robot_server = 3;
     uint32 natsPort = 4;
     string robot_name = 5;
+    bool send_crash = 6;
 }
 
 message RunRequest {
