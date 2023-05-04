@@ -158,13 +158,27 @@ public class Spec {
 					String name = LowerFirstLetter(input.getName());
 					final String format = GetFormat(input);
 					if (format != "") {
+						formData.put(name, GetDefault(input));
 						inObject.put("format", format);
 						pUISchema.put(name, new JObject() {
 							{
 								put("ui:field", format);
 							}
 						});
+					} else if (arrFields != null) {
+						formData.put(name, new JArray() {
+							{
+								add(new Object());
+							}
+						});
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "array");
+							}
+						});
+
 					} else {
+						formData.put(name, GetDefault(input));
 						pUISchema.put(name, new JObject() {
 							{
 								put("ui:field", "variable");
@@ -172,7 +186,6 @@ public class Spec {
 						});
 					}
 
-					formData.put(name, GetDefault(input));
 					inProperties.put(name, inObject);
 					uiOrder.add(name);
 				}
@@ -432,12 +445,27 @@ public class Spec {
 					final String format = GetFormat(option);
 					if (format != "") {
 						optObject.put("format", format);
+						formData.put(name, GetDefault(option));
 						pUISchema.put(name, new JObject() {
 							{
 								put("ui:field", format);
 							}
 						});
+
+					} else if (arrFields != null) {
+						formData.put(name, new JArray() {
+							{
+								add(new Object());
+							}
+						});
+						pUISchema.put(name, new JObject() {
+							{
+								put("ui:field", "array");
+							}
+						});
+
 					} else {
+						formData.put(name, GetDefault(option));
 						pUISchema.put(name, new JObject() {
 							{
 								put("ui:field", "variable");
@@ -445,7 +473,6 @@ public class Spec {
 						});
 					}
 
-					formData.put(name, GetDefault(option));
 					optProperties.put(name, optObject);
 					uiOrder.add(name);
 				}
