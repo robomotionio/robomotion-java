@@ -35,6 +35,12 @@ public @interface FieldAnnotations {
 
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.FIELD)
+	public @interface JsScope {
+		boolean jsScope() default true;
+	}
+
+	@Retention(RetentionPolicy.RUNTIME)
+	@Target(ElementType.FIELD)
 	public @interface MessageOnly {
 		boolean messageOnly() default true;
 	}
