@@ -34,7 +34,9 @@ public final class Utils {
 		}
 	}
 
-	public static boolean IsVersionLessThan(String ver, String other) {
-		return (new ComparableVersion(ver)).compareTo(new ComparableVersion(other)) < 0;
+	public static class Version {
+		public static boolean IsVersionLessThan(String ver, String other) {
+			return (new ComparableVersion(ver)).compareTo(new ComparableVersion(other)) < 0;
+		}
 	}
 }
