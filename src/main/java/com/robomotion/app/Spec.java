@@ -148,6 +148,8 @@ public class Spec {
 						inObject.put("customScope", true);
 					if (MessageScope(input))
 						inObject.put("messageScope", true);
+					if (JsScope(input))
+						inObject.put("jsScope", true);
 					if (MessageOnly(input))
 						inObject.put("messageOnly", true);
 
@@ -285,6 +287,8 @@ public class Spec {
 						outObject.put("customScope", true);
 					if (MessageScope(output))
 						outObject.put("messageScope", true);
+					if (JsScope(output))
+						outObject.put("jsScope", true);
 					if (MessageOnly(output))
 						outObject.put("messageOnly", true);
 
@@ -434,6 +438,8 @@ public class Spec {
 						optObject.put("customScope", true);
 					if (MessageScope(option))
 						optObject.put("messageScope", true);
+					if (JsScope(option))
+						optObject.put("jsScope", true);
 					if (MessageOnly(option))
 						optObject.put("messageOnly", true);
 
@@ -850,6 +856,11 @@ public class Spec {
 	public static boolean MessageScope(Field f) {
 		FieldAnnotations.MessageScope annotation = f.getAnnotation(FieldAnnotations.MessageScope.class);
 		return annotation == null ? false : annotation.messageScope();
+	}
+
+	public static boolean JsScope(Field f) {
+		FieldAnnotations.JsScope annotation = f.getAnnotation(FieldAnnotations.JsScope.class);
+		return annotation == null ? false : annotation.jsScope();
 	}
 
 	public static boolean MessageOnly(Field f) {
