@@ -70,17 +70,4 @@ public class Event {
 
         client.emitFlowEvent(request);
     }
-
-    public static void AppRequest(byte[] data, int timeout) throws RuntimeNotInitializedException {
-        RuntimeHelperGrpc.RuntimeHelperBlockingStub client = Runtime.GetClient();
-        if (client == null)
-            throw new RuntimeNotInitializedException();
-
-        AppRequestRequest request = AppRequestRequest.newBuilder()
-                .setRequest(ByteString.copyFrom(data))
-                .setTimeout(timeout)
-                .build();
-
-        client.appRequest(request);
-    }
 }
