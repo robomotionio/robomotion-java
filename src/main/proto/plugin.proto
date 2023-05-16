@@ -64,6 +64,7 @@ service RuntimeHelper {
     rpc SetVariable(SetVariableRequest) returns (Empty);
     rpc GetRobotInfo(Empty) returns (GetRobotInfoResponse);
     rpc AppRequest(AppRequestRequest) returns (AppRequestResponse);
+    rpc DownloadFile(DownloadFileRequest) returns (Empty);
 }
 
 message Empty {
@@ -146,4 +147,9 @@ message AppRequestRequest {
 
 message AppRequestResponse {
     bytes response = 1;
+}
+
+message DownloadFileRequest {
+    string url = 1;
+    string path = 2;
 }

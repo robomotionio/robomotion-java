@@ -303,4 +303,30 @@ public class Runtime {
 			this.itemId = itemId;
 		}
 	}
+
+	public static void AppRequest(byte[] data, int timeout) throws RuntimeNotInitializedException {
+		RuntimeHelperGrpc.RuntimeHelperBlockingStub client = Runtime.GetClient();
+		if (client == null)
+			throw new RuntimeNotInitializedException();
+
+		AppRequestRequest request = AppRequestRequest.newBuilder()
+				.setRequest(ByteString.copyFrom(data))
+				.setTimeout(timeout)
+				.build();
+
+		client.appRequest(request);
+	}
+
+	public static void DownloadFile(String url, String path) throws RuntimeNotInitializedException {
+		RuntimeHelperGrpc.RuntimeHelperBlockingStub client = Runtime.GetClient();
+		if (client == null)
+			throw new RuntimeNotInitializedException();
+
+		DownloadFileRequest request = DownloadFileRequest.newBuilder()
+				.setUrl(url)
+				.setPath(path)
+				.build();
+
+		client.downloadFile(request);
+	}
 }
