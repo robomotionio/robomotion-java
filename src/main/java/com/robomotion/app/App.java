@@ -81,7 +81,7 @@ public class App {
 
 	public static void Init()
 			throws IOException, ClassNotFoundException, InstantiationException, IllegalAccessException {
-		List classes = GetNodeTypes();
+		List<Class<?>> classes = GetNodeTypes();
 
 		for (Object obj : classes) {
 			Class<?> c = (Class<?>) obj;
@@ -93,21 +93,26 @@ public class App {
 	}
 
 	public static List<Class<?>> GetNodeTypes() throws IOException, ClassNotFoundException {
-		ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
-		ClassPath cp = ClassPath.from(classLoader);
-
-		List<Class<?>> classes = new ArrayList<Class<?>>();
-		ImmutableList<ClassInfo> cis = cp.getTopLevelClasses().asList();
-		for (ClassInfo ci : cis) {
-			if (ci.getName().contains("com.robomotion.") && !ci.getName().contains("com.robomotion.app")) {
-				Class<?> c = Class.forName(ci.getName());
-				if (Node.class.isAssignableFrom(c)) {
-					classes.add(c);
-				}
-			}
-		}
-
-		return classes;
+		return Runtime.RegisteredNodes();
+		/*
+		 * ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+		 * ClassPath cp = ClassPath.from(classLoader);
+		 * 
+		 * List<Class<?>> classes = new ArrayList<Class<?>>();
+		 * ImmutableList<ClassInfo> cis = cp.getTopLevelClasses().asList();
+		 * Runtime.RegisteredNodes();
+		 * for (ClassInfo ci : cis) {
+		 * if (ci.getName().contains("com.robomotion.") &&
+		 * !ci.getName().contains("com.robomotion.app")) {
+		 * Class<?> c = Class.forName(ci.getName());
+		 * if (Node.class.isAssignableFrom(c)) {
+		 * classes.add(c);
+		 * }
+		 * }
+		 * }
+		 * 
+		 * return classes;
+		 */
 	}
 
 	private static JSONObject ReadConfigFile() throws Exception {

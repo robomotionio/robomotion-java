@@ -6,6 +6,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -25,6 +26,7 @@ public class Runtime {
 	private static Map<String, Node> nodes = new HashMap<String, Node>();
 	public static int activeNodes = 0;
 	public static Boolean started = false;
+	private static List<Class<?>> handlers;
 
 	public static void SetClient(RuntimeHelperGrpc.RuntimeHelperBlockingStub cli) {
 		client = cli;
@@ -70,6 +72,14 @@ public class Runtime {
 
 	public static Map<String, Node> Nodes() {
 		return nodes;
+	}
+
+	public static void RegisterNodes(Class<?>... handlers) {
+		Runtime.handlers = List.of(handlers);
+	}
+
+	public static List<Class<?>> RegisteredNodes() {
+		return Runtime.handlers;
 	}
 
 	public static byte[] Compress(byte[] data) {
