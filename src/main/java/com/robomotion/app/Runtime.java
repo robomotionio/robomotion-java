@@ -43,6 +43,7 @@ public class Runtime {
 
 				switch (state) {
 					case CONNECTING:
+					case IDLE:
 					case READY:
 						break;
 
