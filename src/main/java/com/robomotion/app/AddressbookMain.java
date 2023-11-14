@@ -78,7 +78,7 @@ public class AddressbookMain {
     }
 
     public static Object readFromFile(String id) throws java.io.IOException {
-        System.out.println("the id is " + id );
+
         id = id.replaceFirst(ROBOMOTION_CAPNP_PREFIX, "");
         
         try {
@@ -100,7 +100,7 @@ public class AddressbookMain {
             System.out.println("the obj is " + obj.toString());
             return obj;
             
-        } catch (org.apache.commons.codec.DecoderException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             return "";
         }
