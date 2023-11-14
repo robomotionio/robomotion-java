@@ -2,6 +2,7 @@ package com.robomotion.app;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -139,10 +140,31 @@ public class Runtime {
 		client.close(request);
 	}
 
-	public static <T> T GetVariable(Variable variable, Context ctx) throws RuntimeNotInitializedException {
+	public static <T> T GetVariable(Variable variable, Context ctx) throws RuntimeNotInitializedException, IOException {
 		if (variable.scope.compareTo("Custom") == 0)
 			return (T) variable.name;
 		if (variable.scope.compareTo("Message") == 0) {
+
+			T val = (T) ctx.Get(variable.name, null);
+			System.out.println("the val is : ");
+			System.out.println(val);
+			System.out.println("type: " + (val instanceof HashMap));
+			if (val instanceof HashMap ) {
+				Map<String, Object> obj = (HashMap<String, Object>) val;
+				Object isDataCut = obj.get("is_data_cut");
+				System.out.println("the is data cut");
+				System.out.println(isDataCut);
+				if (isDataCut instanceof Boolean && (Boolean)isDataCut) {
+					Object robomotion_capnp_id = obj.get("robomotion_capnp_id");
+					System.out.println("robomotion_capnp_id: " + robomotion_capnp_id);
+					System.out.println("is instance " + robomotion_capnp_id instanceof String);
+					if (robomotion_capnp_id instanceof String  && ((String)robomotion_capnp_id).startsWith(AddressbookMain.ROBOMOTION_CAPNP_PREFIX)) {
+						return (T) AddressbookMain.readFromFile((String)robomotion_capnp_id);
+					}
+				}
+				
+			} 
+
 			return (T) ctx.Get(variable.name, null);
 		}
 
@@ -159,8 +181,10 @@ public class Runtime {
 		return (T) st.Parse();
 	}
 
-	public static <T> void SetVariable(Variable variable, Context ctx, T value) throws RuntimeNotInitializedException {
+	public static <T> void SetVariable(Variable variable, Context ctx, T value) throws RuntimeNotInitializedException, IOException {
 		if (variable.scope.compareTo("Message") == 0) {
+			 
+			value = (T) com.robomotion.app.AddressbookMain.writeAddressBook(value, GetRobotInfo());
 			ctx.Set(variable.name, value);
 		}
 
@@ -209,7 +233,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public T Get(Context ctx) throws RuntimeNotInitializedException {
+		public T Get(Context ctx) throws RuntimeNotInitializedException, IOException {
 			return Runtime.GetVariable(this, ctx);
 		}
 	}
@@ -220,7 +244,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public void Set(Context ctx, T value) throws RuntimeNotInitializedException {
+		public void Set(Context ctx, T value) throws RuntimeNotInitializedException, IOException {
 			Runtime.SetVariable(this, ctx, value);
 		}
 	}
@@ -230,7 +254,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public T Get(Context ctx) throws RuntimeNotInitializedException {
+		public T Get(Context ctx) throws RuntimeNotInitializedException, IOException {
 			return Runtime.GetVariable(this, ctx);
 		}
 	}
@@ -251,7 +275,7 @@ public class Runtime {
 			this.itemId = itemId;
 		}
 
-		public Map<String, Object> Get(Context ctx) throws RuntimeNotInitializedException {
+		public Map<String, Object> Get(Context ctx) throws RuntimeNotInitializedException, IOException {
 			if (client == null)
 				throw new RuntimeNotInitializedException();
 
@@ -277,7 +301,7 @@ public class Runtime {
 			return (Map<String, Object>) st.Parse();
 		}
 
-		public Map<String, Object> Set(Context ctx, byte[] data) throws RuntimeNotInitializedException {
+		public Map<String, Object> Set(Context ctx, byte[] data) throws RuntimeNotInitializedException, IOException {
 			if (client == null)
 				throw new RuntimeNotInitializedException();
 
