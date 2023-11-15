@@ -11,6 +11,7 @@ service Node {
     rpc OnCreate(OnCreateRequest) returns (OnCreateResponse);
     rpc OnMessage(OnMessageRequest) returns (OnMessageResponse);
     rpc OnClose(OnCloseRequest) returns (OnCloseResponse);
+    rpc GetCapabilities(Empty) returns(PGetCapabilitiesResponse);
 }
 
 message Error {
@@ -49,6 +50,10 @@ message OnCloseRequest {
 
 message OnCloseResponse {
     Error error = 1;
+}
+
+message PGetCapabilitiesResponse {
+    uint64 capabilities = 1;
 }
 
 service RuntimeHelper {

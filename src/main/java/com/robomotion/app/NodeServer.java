@@ -6,13 +6,15 @@ import io.grpc.Status;
 import io.grpc.StatusException;
 import io.grpc.stub.StreamObserver;
 
+import com.robomotion.app.Empty;
 import com.google.protobuf.ByteString;
 import com.robomotion.app.NodeGrpc.NodeImplBase;
+
 
 public class NodeServer extends NodeImplBase 
 {
 	@Override
-	public void init(InitRequest request, StreamObserver<Empty> responseObserver)
+	public void init(InitRequest request, StreamObserver<com.robomotion.app.Empty> responseObserver)
 	{
 		try {
 			final ManagedChannel channel = ManagedChannelBuilder.forTarget("127.0.0.1:"+ request.getPort())
@@ -120,5 +122,14 @@ public class NodeServer extends NodeImplBase
 					.withCause(err)
 					.asRuntimeException());
 		}
+	}
+
+	@Override
+	public void getCapabilities(com.robomotion.app.Empty request, StreamObserver<PGetCapabilitiesResponse> responseObserver)
+	{
+		
+			PGetCapabilitiesResponse response = PGetCapabilitiesResponse.newBuilder().setCapabilities(Capability.getCapabilities()).build();
+			responseObserver.onNext(response);
+			responseObserver.onCompleted();
 	}
 }
