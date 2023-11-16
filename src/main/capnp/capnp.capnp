@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 # THE SOFTWARE.
 
-@0x9eb32e19f86ee174;
+@0x85d3acc39d94e0f8;
 
 using Cxx = import "/capnp/c++.capnp";
 $Cxx.namespace("addressbook");
@@ -32,4 +32,3 @@ struct NodeMessage {
     content @0 :Data;
     # The whole message.
 }
-

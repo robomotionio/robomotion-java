@@ -25,9 +25,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Map;
@@ -39,35 +41,48 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import org.apache.commons.codec.binary.Hex;
 import org.capnproto.StructList;
-import com.robomotion.app.Addressbook.NodeMessage;
+import com.robomotion.app.Robomotion.NodeMessage;
 import com.google.gson.Gson;
 import com.google.protobuf.UInt32Value;
 import com.google.protobuf.UInt64Value;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import org.apache.commons.codec.binary.Hex;
-public class AddressbookMain {
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
+public class RobomotionCapnp {
     static int CAPNP_LIMIT = 1;
     static String ROBOMOTION_CAPNP_PREFIX = "robomotion-capnp";
     public static Object writeAddressBook(Object value, Map<String, Object> robotInfo) throws java.io.IOException {
         System.out.println(value);
-        byte[] data = AddressbookMain.Serialize(value);
-        if(data.length > AddressbookMain.CAPNP_LIMIT) {
+        byte[] data = RobomotionCapnp.Serialize(value.toString());
+        String str = "{\"name\":\"latif\",\"surname\":\"uluman\"}";
+        data = str.getBytes();
+        
+        if(data.length < RobomotionCapnp.CAPNP_LIMIT) {
+            System.out.println("limiti gecemedi");
             return value;
         }
         String robotID = robotInfo.get("id").toString();
         String cacheDir = robotInfo.get("cache_dir").toString();
         Path dir = Path.of(cacheDir, "temp", "robots", robotID);
+        System.out.println("path: " + dir);
         try {
             Files.createDirectories(dir);
         } catch (IOException e) {
             return null; // Handle the error as needed
         }
+        System.out.println("try pass");
         Path path = Files.createTempFile(dir, "robomotion-capnp", null);        
         org.capnproto.MessageBuilder message = new org.capnproto.MessageBuilder();
-        NodeMessage.Builder addressbook = message.initRoot(NodeMessage.factory);
+        NodeMessage.Builder capnp = message.initRoot(NodeMessage.factory);
         
-        addressbook.setContent(data);
+        capnp.setContent(data);
 
         FileOutputStream fileOutputStream = new FileOutputStream(path.toString());
         org.capnproto.SerializePacked.writeToUnbuffered(
@@ -83,20 +98,23 @@ public class AddressbookMain {
         
         try {
             byte[] bytes = Hex.decodeHex(id.toCharArray());
-            String path = new String(bytes, "UTF-8");
-            System.out.println("the path is " + path);
-            
-            FileInputStream fileInputStream = new FileInputStream(path);
-            System.out.println("000000000000000");
-            org.capnproto.MessageReader message = org.capnproto.SerializePacked.readFromUnbuffered((fileInputStream).getChannel());
+            String filePath = new String(bytes, "UTF-8");
+            System.out.println("the path is " + filePath);
+            filePath = "/home/latif/.config/robomotion/cache/temp/robots/4dc76b1b-7e8c-4345-8a41-9d7d37dbc299/table/robomotion-capnp1060402068";
+            Path path = Paths.get(filePath);
+            FileInputStream fileInputStream = new FileInputStream(path.toFile());
+            FileChannel channel = fileInputStream.getChannel();
+
+            org.capnproto.MessageReader message = org.capnproto.SerializePacked.readFromUnbuffered(channel);
             fileInputStream.close();
             System.out.println("1111111");
             System.out.println(message);
+            
             NodeMessage.Reader nodeMessage = message.getRoot(NodeMessage.factory);
             System.out.println("2222222222");
             byte[] data = nodeMessage.getContent().toArray();
             System.out.println("3333333333");
-            Object obj = AddressbookMain.Deserialize(data, Object.class);
+            Object obj = RobomotionCapnp.Deserialize(data, Object.class);
             System.out.println("the obj is " + obj.toString());
             return obj;
             

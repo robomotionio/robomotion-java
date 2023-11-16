@@ -158,8 +158,8 @@ public class Runtime {
 					Object robomotion_capnp_id = obj.get("robomotion_capnp_id");
 					System.out.println("robomotion_capnp_id: " + robomotion_capnp_id);
 					System.out.println("is instance " + robomotion_capnp_id instanceof String);
-					if (robomotion_capnp_id instanceof String  && ((String)robomotion_capnp_id).startsWith(AddressbookMain.ROBOMOTION_CAPNP_PREFIX)) {
-						return (T) AddressbookMain.readFromFile((String)robomotion_capnp_id);
+					if (robomotion_capnp_id instanceof String  && ((String)robomotion_capnp_id).startsWith(RobomotionCapnp.ROBOMOTION_CAPNP_PREFIX)) {
+						return (T) RobomotionCapnp.readFromFile((String)robomotion_capnp_id);
 					}
 				}
 				
@@ -184,7 +184,7 @@ public class Runtime {
 	public static <T> void SetVariable(Variable variable, Context ctx, T value) throws RuntimeNotInitializedException, IOException {
 		if (variable.scope.compareTo("Message") == 0) {
 			 
-			value = (T) com.robomotion.app.AddressbookMain.writeAddressBook(value, GetRobotInfo());
+			value = (T) com.robomotion.app.RobomotionCapnp.writeAddressBook(value, GetRobotInfo());
 			ctx.Set(variable.name, value);
 		}
 
