@@ -144,28 +144,15 @@ public class Runtime {
 		if (variable.scope.compareTo("Custom") == 0)
 			return (T) variable.name;
 		if (variable.scope.compareTo("Message") == 0) {
-
 			T val = (T) ctx.Get(variable.name, null);
-			System.out.println("the val is : ");
-			System.out.println(val);
-			System.out.println("type: " + (val instanceof HashMap));
-			if (val instanceof HashMap ) {
+			if(LargeMessageObject.isLMO(val)){
 				Map<String, Object> obj = (HashMap<String, Object>) val;
-				Object isDataCut = obj.get("is_data_cut");
-				System.out.println("the is data cut");
-				System.out.println(isDataCut);
-				if (isDataCut instanceof Boolean && (Boolean)isDataCut) {
-					Object robomotion_capnp_id = obj.get("robomotion_capnp_id");
-					System.out.println("robomotion_capnp_id: " + robomotion_capnp_id);
-					System.out.println("is instance " + robomotion_capnp_id instanceof String);
-					if (robomotion_capnp_id instanceof String  && ((String)robomotion_capnp_id).startsWith(RobomotionCapnp.ROBOMOTION_CAPNP_PREFIX)) {
-						return (T) RobomotionCapnp.readFromFile((String)robomotion_capnp_id);
-					}
-				}
-				
-			} 
+				Object id = obj.get("id");
+				T result = LargeMessageObject.deserializeLMO((String)id);
+				return result;
+			}
+			
 
-			return (T) ctx.Get(variable.name, null);
 		}
 
 		if (client == null)
@@ -178,20 +165,37 @@ public class Runtime {
 
 		GetVariableResponse response = client.getVariable(request);
 		Struct st = new Struct(response.getValue());
+		T result = (T) st.Parse();
+		if (LargeMessageObject.isLMO(result)){
+			if(LargeMessageObject.isLMO(result)){
+				Map<String, Object> obj = (HashMap<String, Object>) result;
+				Object id = obj.get("id");
+				T result = LargeMessageObject.deserializeLMO((String)id);
+				return result;
+			}
+		}
 		return (T) st.Parse();
 	}
 
 	public static <T> void SetVariable(Variable variable, Context ctx, T value) throws RuntimeNotInitializedException, IOException {
 		if (variable.scope.compareTo("Message") == 0) {
-			 
-			value = (T) com.robomotion.app.RobomotionCapnp.writeAddressBook(value, GetRobotInfo());
+			
+			Object serializedValue = LargeMessageObject.serializeLMO(value);
+			if (serializedValue != null) {
+				value = (T)serializedValue;
+			}
 			ctx.Set(variable.name, value);
 		}
 
 		if (client == null)
 			throw new RuntimeNotInitializedException();
 
+		Object serializedValue = LargeMessageObject.serializeLMO(value);
+		if (serializedValue != null) {
+			value = (T)serializedValue;
+		}	
 		Value val = Struct.ToValue(value);
+		
 		com.google.protobuf.Struct st = com.google.protobuf.Struct.newBuilder().putFields("value", val).build();
 
 		com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder().setScope(variable.scope)
@@ -212,6 +216,15 @@ public class Runtime {
 		Struct st = new Struct(response.getRobot());
 		return (Map<String, Object>) st.Parse();
 	}
+
+	public static String GetRobotID() throws RuntimeNotInitializedException {
+        Map<String, Object> info = GetRobotInfo();
+        if (info.containsKey("id")) {
+            Object id = info.get("id");
+            return id.toString();
+        }
+        return null;
+    }
 
 	public static String GetRobotVersion() throws RuntimeNotInitializedException {
 		Map<String, Object> info = GetRobotInfo();

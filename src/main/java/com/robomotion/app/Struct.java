@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.deser.impl.ExternalTypeHandler.Builder;
 import com.google.protobuf.ListValue;
 import com.google.protobuf.Value;
 
@@ -67,7 +68,7 @@ public class Struct {
 	public static Value ToValue(Object obj) {
 		if (obj == null) return Value.newBuilder().setNullValue(null).build();
 		else if (obj instanceof Boolean) return Value.newBuilder().setBoolValue((Boolean)obj).build();
-		else if (obj instanceof Integer) return Value.newBuilder().setNumberValue((Float)obj).build();
+		else if (obj instanceof Integer) return Value.newBuilder().setNumberValue((Integer)obj).build();
 		else if (obj instanceof Byte) return Value.newBuilder().setNumberValue((Float)obj).build();
 		else if (obj instanceof Short) return Value.newBuilder().setNumberValue((Float)obj).build();
 		else if (obj instanceof Long) return Value.newBuilder().setNumberValue((Float)obj).build();
@@ -76,14 +77,14 @@ public class Struct {
 		else if (obj instanceof String) return Value.newBuilder().setStringValue((String)obj).build();
 		else if (obj instanceof ArrayList<?>) {
 			ArrayList<?> arr = (ArrayList<?>) obj;
-			ListValue list = ListValue.newBuilder().build();
+			com.google.protobuf.ListValue.Builder list = ListValue.newBuilder();
 
 			int index = 0;
 			for (Object element : arr) {
-				list.toBuilder().setValues(index, ToValue(element));
+				list.setValues(index, ToValue(element));
 			}
 			
-			return Value.newBuilder().setListValue(list).build();
+			return Value.newBuilder().setListValue(list.build()).build();
 		}
 		else if (obj instanceof Class<?>) {
 			Field[] fields = ((Class) obj).getFields();
@@ -104,15 +105,14 @@ public class Struct {
 			return Value.newBuilder().setStructValue(st).build();
 		}
 		else if (obj instanceof Map<?, ?>) {
-			Map<String,?> map = (Map<String,?>)obj;
-			com.google.protobuf.Struct st = com.google.protobuf.Struct.newBuilder().build();
-			
+			Map<String,?> map = (Map<String,?>)obj;			
+			com.google.protobuf.Struct.Builder st = com.google.protobuf.Struct.newBuilder(); // Use a builder to modify the Struct
+
 			for (String key : map.keySet()) {
 				Object value = map.get(key);
-				st.toBuilder().putFields(key, ToValue(value));
+				st.putFields(key, ToValue(value)); // Add the field to the Struct
 			}
-			
-			return Value.newBuilder().setStructValue(st).build();
+			return Value.newBuilder().setStructValue(st.build()).build();
 		}
 		
 		return Value.newBuilder().setStringValue(String.format("%s", obj)).build();

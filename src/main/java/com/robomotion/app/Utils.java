@@ -16,6 +16,16 @@ public final class Utils {
 			return file.exists() && !file.isDirectory();
 		}
 
+		public static String GetTempPath() {
+			String home = UserHomeDir();
+			String osName = System.getProperty("os.name").toLowerCase();
+	
+			if (osName.contains("win")) {
+				return home + "\\AppData\\Local\\Robomotion\\temp";
+			}
+			return home + "/.config/robomotion/temp";
+		}
+
 		public static String UserHomeDir() {
 			if (SystemUtils.IS_OS_WINDOWS) {
 				String home = System.getenv("HOMEDRIVE") + System.getenv("HOMEPATH");
