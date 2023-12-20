@@ -1,8 +1,11 @@
 package com.robomotion.app;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+
+import org.json.simple.parser.ParseException;
 
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.JsonPath;
@@ -37,11 +40,15 @@ public class Message implements Context {
 		return (T) docCtx.read(jsonPath);
 	}
 
-	public byte[] GetRaw() {
+	public byte[] GetRaw(boolean withUnpack) throws RuntimeNotInitializedException, ParseException, IOException  {
+		if (withUnpack) {			
+			return LargeMessageObject.UnpackMessageBytes(this.data);
+		}
+		
 		return this.data;
 	}
 
-	public void SetRaw(byte[] data) {
+	public void SetRaw(byte[] data, boolean withPack) {
 		this.data = data;
 	}
 

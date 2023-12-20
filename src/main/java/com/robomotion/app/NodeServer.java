@@ -78,7 +78,7 @@ public class NodeServer extends NodeImplBase
 			Context ctx = new Message(data);
 			node.OnMessage(ctx);
 
-			byte[] outMessage = ctx.GetRaw();
+			byte[] outMessage = ctx.GetRaw(false);
 			OnMessageResponse response = OnMessageResponse.newBuilder().setOutMessage(ByteString.copyFrom(outMessage)).build();
 			responseObserver.onNext(response);
 			responseObserver.onCompleted();

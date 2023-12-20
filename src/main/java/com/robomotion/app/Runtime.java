@@ -159,7 +159,7 @@ public class Runtime {
 			throw new RuntimeNotInitializedException();
 
 		com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder().setScope(variable.scope)
-				.setName(variable.name).setPayload(ByteString.copyFrom(ctx.GetRaw())).build();
+				.setName(variable.name).setPayload(ByteString.copyFrom(ctx.GetRaw(false))).build();
 
 		GetVariableRequest request = GetVariableRequest.newBuilder().setVariable(var).build();
 

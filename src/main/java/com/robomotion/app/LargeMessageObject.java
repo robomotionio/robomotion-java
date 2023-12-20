@@ -10,12 +10,13 @@ import org.slf4j.helpers.Util;
 
 import java.nio.file.*;
 import com.google.gson.*;
-
+import org.json.simple.JSONObject;
+import org.json.simple.parser.*;
 class Constants {
     public static final int LMO_MAGIC = 0x1343B7E;
-    public static final int LMO_LIMIT = 10; // 256kb
+    public static final int LMO_LIMIT = 110; // 256kb
     public static final int LMO_VERSION = 0x01;
-    public static final int LMO_HEAD = 5;
+    public static final int LMO_HEAD = 10;
 
     public static String newId() {
         byte[] bytes = new byte[16];
@@ -149,12 +150,60 @@ class LargeMessageObject {
         return (T)objectMapper.treeToValue(deserializedData, Object.class);
         
     }
+    
+    public static void PrintMap(Map<String,Object> map) {
+        for (Map.Entry<String, Object> entry : map.entrySet()) {
+            System.out.println(entry.getKey() + ":" + entry.getValue().toString());
+        }
+    }
+
+    public static byte[] UnpackMessageBytes(byte[] inMsg) throws RuntimeNotInitializedException, ParseException, IOException {
+        if (!Capability.isLMOCapable())
+        {   
+            return inMsg;
+        }
+        Map<String,Object> msg = UnpackMessage(inMsg);
+        return Runtime.Serialize(msg);          
+         
+    }
+
+    public static Map<String, Object> UnpackMessage(byte[] inMsg) throws RuntimeNotInitializedException, ParseException, IOException{
+        if (!Capability.isLMOCapable())
+        {
+            return null;
+        }
+        Map<String, Object> msg = new HashMap<>();
+        Map<String, Object> deserializedMsg = new HashMap<String, Object>();
+		deserializedMsg = Runtime.Deserialize(inMsg, deserializedMsg.getClass());
+        
+        for (Map.Entry<String, Object> entry : deserializedMsg.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            if(isLMO(value)){
+                if (value instanceof Map<?, ?>) {
+                Map<?, ?> mapVal = (Map<?, ?>) value;
+                if (mapVal.containsKey("id")) {
+                    
+                    Object id = mapVal.get("id");
+                    Object result = deserializeLMO((String)id);  
+                    if (result != null) {
+                        msg.put(key,result);
+                        continue;
+                    }         
+                   
+                }
+            }
+            }
+            msg.put(key, value);
+        }
+        
+        return msg;
+    }
 
     public static boolean isLMO(Object value) throws RuntimeNotInitializedException {
         if (!Capability.isLMOCapable()) {
             return false;
         }
-
         if (value instanceof Map<?, ?>) {
             Map<?, ?> mapVal = (Map<?, ?>) value;
             if (mapVal.containsKey("magic")) {
