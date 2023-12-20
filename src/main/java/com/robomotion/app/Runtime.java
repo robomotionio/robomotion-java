@@ -170,8 +170,8 @@ public class Runtime {
 			if(LargeMessageObject.isLMO(result)){
 				Map<String, Object> obj = (HashMap<String, Object>) result;
 				Object id = obj.get("id");
-				T result = LargeMessageObject.deserializeLMO((String)id);
-				return result;
+				
+				return LargeMessageObject.deserializeLMO((String)id);
 			}
 		}
 		return (T) st.Parse();

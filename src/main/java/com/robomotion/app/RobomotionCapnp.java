@@ -100,6 +100,7 @@ public class RobomotionCapnp {
             byte[] bytes = Hex.decodeHex(id.toCharArray());
             String filePath = new String(bytes, "UTF-8");
             System.out.println("the path is " + filePath);
+            String robotID =  Runtime.GetRobotID();
             filePath = "/home/latif/.config/robomotion/cache/temp/robots/4dc76b1b-7e8c-4345-8a41-9d7d37dbc299/table/robomotion-capnp1060402068";
             Path path = Paths.get(filePath);
             FileInputStream fileInputStream = new FileInputStream(path.toFile());
@@ -107,15 +108,10 @@ public class RobomotionCapnp {
 
             org.capnproto.MessageReader message = org.capnproto.SerializePacked.readFromUnbuffered(channel);
             fileInputStream.close();
-            System.out.println("1111111");
-            System.out.println(message);
             
             NodeMessage.Reader nodeMessage = message.getRoot(NodeMessage.factory);
-            System.out.println("2222222222");
             byte[] data = nodeMessage.getContent().toArray();
-            System.out.println("3333333333");
             Object obj = RobomotionCapnp.Deserialize(data, Object.class);
-            System.out.println("the obj is " + obj.toString());
             return obj;
             
         } catch (Exception e) {
