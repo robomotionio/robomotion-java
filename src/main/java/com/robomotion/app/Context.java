@@ -13,7 +13,7 @@ public interface Context {
 
 	public byte[] GetRaw(boolean withUnpack) throws RuntimeNotInitializedException, ParseException, IOException;
 
-	public void SetRaw(byte[] data, boolean withPack) throws  RuntimeNotInitializedException;
+	public void SetRaw(byte[] data, boolean withPack) throws  RuntimeNotInitializedException, IOException;
 
 	public boolean IsEmpty();
 }

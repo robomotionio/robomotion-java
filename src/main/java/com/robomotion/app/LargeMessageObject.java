@@ -3,6 +3,8 @@ package com.robomotion.app;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.*;
 
 import org.apache.commons.codec.binary.Base32;
@@ -94,45 +96,41 @@ class LargeMessageObject {
         return dict;
     }
 
-    public static Object serializeLMO(Object value) throws RuntimeNotInitializedException {
+    public static Object serializeLMO(Object value) throws RuntimeNotInitializedException, IOException {
         if (!Capability.isLMOCapable()) {
             return null;
         }
 
-        try {
-            String res = new ObjectMapper().writeValueAsString(value);
-            byte[] data = res.getBytes(StandardCharsets.UTF_8);
+        String res = new ObjectMapper().writeValueAsString(value);
+        byte[] data = res.getBytes(StandardCharsets.UTF_8);
 
-            int dataLen = data.length;
-            if (dataLen < Constants.LMO_LIMIT) {
-                return null;
-            }
-
-            String id = Constants.newId().toLowerCase();
-            String head = new String(Arrays.copyOfRange(data, 0, Constants.LMO_HEAD), StandardCharsets.UTF_8);
-
-            LargeMessageObject lmo = new LargeMessageObject();
-            lmo.setMagic(Constants.LMO_MAGIC);
-            lmo.setVersion(Constants.LMO_VERSION);
-            lmo.setId(id);
-            lmo.setHead(head);
-            lmo.setSize(dataLen);
-            lmo.setData(value);
-            
-            String robotID = Runtime.GetRobotID();
-            String tempPath = Utils.File.GetTempPath();
-            String dir = Paths.get(tempPath, "robots", robotID).toString();
-            new File(dir).mkdirs();
-            
-            String filePath = Paths.get(dir, id + ".lmo").toString();            
-            new com.fasterxml.jackson.databind.ObjectMapper().writeValue(new File(filePath), lmo);
-            lmo.setData(null);
-
-            return lmo.toDictionary();
-        } catch (Exception ex) {
+        int dataLen = data.length;
+        if (dataLen < Constants.LMO_LIMIT) {
+            return null;
         }
 
-        return null;
+        String id = Constants.newId().toLowerCase();
+        String head = new String(Arrays.copyOfRange(data, 0, Constants.LMO_HEAD), StandardCharsets.UTF_8);
+
+        LargeMessageObject lmo = new LargeMessageObject();
+        lmo.setMagic(Constants.LMO_MAGIC);
+        lmo.setVersion(Constants.LMO_VERSION);
+        lmo.setId(id);
+        lmo.setHead(head);
+        lmo.setSize(dataLen);
+        lmo.setData(value);
+        
+        String robotID = Runtime.GetRobotID();
+        String tempPath = Utils.File.GetTempPath();
+        String dir = Paths.get(tempPath, "robots", robotID).toString();
+        new File(dir).mkdirs();
+        
+        String filePath = Paths.get(dir, id + ".lmo").toString();            
+        new com.fasterxml.jackson.databind.ObjectMapper().writeValue(new File(filePath), lmo);
+        lmo.setData(null);
+
+        return lmo.toDictionary();
+
     }
 
     public static <T> T deserializeLMO(String id) throws IOException, RuntimeNotInitializedException {
@@ -157,7 +155,7 @@ class LargeMessageObject {
         }
     }
 
-    public static byte[] PackMessageBytes(byte[] inMsg) throws RuntimeNotInitializedException {
+    public static byte[] PackMessageBytes(byte[] inMsg) throws RuntimeNotInitializedException, IOException {
         if (!Capability.isLMOCapable() || inMsg.length < Constants.LMO_LIMIT)
         {   
             return inMsg;
@@ -172,7 +170,7 @@ class LargeMessageObject {
         return inMsg;
     }
 
-    public static Map<String, Object> PackMessage(Map<String, Object> msg) throws RuntimeNotInitializedException {
+    public static Map<String, Object> PackMessage(Map<String, Object> msg) throws RuntimeNotInitializedException, IOException {
         if (!Capability.isLMOCapable())
         {   
             return msg;

@@ -48,7 +48,7 @@ public class Message implements Context {
 		return this.data;
 	}
 
-	public void SetRaw(byte[] data, boolean withPack) throws RuntimeNotInitializedException {
+	public void SetRaw(byte[] data, boolean withPack) throws RuntimeNotInitializedException, IOException {
 		if(withPack) {		
 			this.data = LargeMessageObject.PackMessageBytes(data);			
 		}else{
