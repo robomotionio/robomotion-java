@@ -157,6 +157,41 @@ class LargeMessageObject {
         }
     }
 
+    public static byte[] PackMessageBytes(byte[] inMsg) throws RuntimeNotInitializedException {
+        if (!Capability.isLMOCapable() || inMsg.length < Constants.LMO_LIMIT)
+        {   
+            return inMsg;
+        }
+        
+        Map<String, Object> msg = new HashMap<String, Object>();
+        msg = Runtime.Deserialize(inMsg, msg.getClass());         
+        if (msg != null) {
+            msg = PackMessage(msg);
+            return  Runtime.Serialize(msg);
+        }
+        return inMsg;
+    }
+
+    public static Map<String, Object> PackMessage(Map<String, Object> msg) throws RuntimeNotInitializedException {
+        if (!Capability.isLMOCapable())
+        {   
+            return msg;
+        }
+        Map<String, Object> temp = new HashMap<String, Object>();
+        for (Map.Entry<String, Object> entry : msg.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            
+            Object lmo = serializeLMO(value);
+            
+            if (lmo != null){
+                temp.put(key, lmo);
+            }else{
+                temp.put(key, value);
+            }
+        }
+        return temp;
+    }
     public static byte[] UnpackMessageBytes(byte[] inMsg) throws RuntimeNotInitializedException, ParseException, IOException {
         if (!Capability.isLMOCapable())
         {   
@@ -166,6 +201,7 @@ class LargeMessageObject {
         return Runtime.Serialize(msg);          
          
     }
+
 
     public static Map<String, Object> UnpackMessage(byte[] inMsg) throws RuntimeNotInitializedException, ParseException, IOException{
         if (!Capability.isLMOCapable())

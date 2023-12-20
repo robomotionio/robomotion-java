@@ -48,8 +48,12 @@ public class Message implements Context {
 		return this.data;
 	}
 
-	public void SetRaw(byte[] data, boolean withPack) {
-		this.data = data;
+	public void SetRaw(byte[] data, boolean withPack) throws RuntimeNotInitializedException {
+		if(withPack) {		
+			this.data = LargeMessageObject.PackMessageBytes(data);			
+		}else{
+			this.data = data;
+		}
 	}
 
 	public boolean IsEmpty() {

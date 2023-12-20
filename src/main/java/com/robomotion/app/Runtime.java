@@ -12,6 +12,8 @@ import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
+import org.json.simple.parser.ParseException;
+
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
@@ -140,7 +142,7 @@ public class Runtime {
 		client.close(request);
 	}
 
-	public static <T> T GetVariable(Variable variable, Context ctx) throws RuntimeNotInitializedException, IOException {
+	public static <T> T GetVariable(Variable variable, Context ctx) throws RuntimeNotInitializedException, IOException, ParseException {
 		if (variable.scope.compareTo("Custom") == 0)
 			return (T) variable.name;
 		if (variable.scope.compareTo("Message") == 0) {
@@ -246,7 +248,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public T Get(Context ctx) throws RuntimeNotInitializedException, IOException {
+		public T Get(Context ctx) throws RuntimeNotInitializedException, IOException, ParseException {
 			return Runtime.GetVariable(this, ctx);
 		}
 	}
@@ -267,7 +269,7 @@ public class Runtime {
 			super(scope, name);
 		}
 
-		public T Get(Context ctx) throws RuntimeNotInitializedException, IOException {
+		public T Get(Context ctx) throws RuntimeNotInitializedException, IOException, ParseException {
 			return Runtime.GetVariable(this, ctx);
 		}
 	}
@@ -288,7 +290,7 @@ public class Runtime {
 			this.itemId = itemId;
 		}
 
-		public Map<String, Object> Get(Context ctx) throws RuntimeNotInitializedException, IOException {
+		public Map<String, Object> Get(Context ctx) throws RuntimeNotInitializedException, IOException, ParseException {
 			if (client == null)
 				throw new RuntimeNotInitializedException();
 
@@ -314,7 +316,7 @@ public class Runtime {
 			return (Map<String, Object>) st.Parse();
 		}
 
-		public Map<String, Object> Set(Context ctx, byte[] data) throws RuntimeNotInitializedException, IOException {
+		public Map<String, Object> Set(Context ctx, byte[] data) throws RuntimeNotInitializedException, IOException, ParseException {
 			if (client == null)
 				throw new RuntimeNotInitializedException();
 
