@@ -14,9 +14,9 @@ import org.json.simple.JSONObject;
 import org.json.simple.parser.*;
 class Constants {
     public static final int LMO_MAGIC = 0x1343B7E;
-    public static final int LMO_LIMIT = 110; // 256kb
+    public static final int LMO_LIMIT = 256 << 10; // 256kb
     public static final int LMO_VERSION = 0x01;
-    public static final int LMO_HEAD = 10;
+    public static final int LMO_HEAD = 100;
 
     public static String newId() {
         byte[] bytes = new byte[16];
