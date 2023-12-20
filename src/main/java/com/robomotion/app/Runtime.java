@@ -168,14 +168,12 @@ public class Runtime {
 		GetVariableResponse response = client.getVariable(request);
 		Struct st = new Struct(response.getValue());
 		T result = (T) st.Parse();
-		if (LargeMessageObject.isLMO(result)){
-			if(LargeMessageObject.isLMO(result)){
+		if(LargeMessageObject.isLMO(result)){
 				Map<String, Object> obj = (HashMap<String, Object>) result;
 				Object id = obj.get("id");
 				
 				return LargeMessageObject.deserializeLMO((String)id);
 			}
-		}
 		return (T) st.Parse();
 	}
 
