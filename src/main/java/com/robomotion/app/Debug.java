@@ -62,7 +62,7 @@ public class Debug {
 
 		System.out.println(String.format("Attached to %s", attachedTo));
 
-		final ManagedChannel channel = ManagedChannelBuilder.forTarget(attachedTo).usePlaintext(true).build();
+		final ManagedChannel channel = ManagedChannelBuilder.forTarget(attachedTo).usePlaintext().build();
 		DebugGrpc.DebugBlockingStub stub = DebugGrpc.newBlockingStub(channel);
 		AttachRequest request = AttachRequest.newBuilder().setConfig(ByteString.copyFrom(cfgData)).build();
 		stub.attach(request);
@@ -75,7 +75,7 @@ public class Debug {
 			System.exit(0);
 		}
 
-		final ManagedChannel channel = ManagedChannelBuilder.forTarget(attachedTo).usePlaintext(true).build();
+		final ManagedChannel channel = ManagedChannelBuilder.forTarget(attachedTo).usePlaintext().build();
 		DebugGrpc.DebugBlockingStub stub = DebugGrpc.newBlockingStub(channel);
 		DetachRequest request = DetachRequest.newBuilder().setNamespace(ns).build();
 		stub.detach(request);
@@ -136,7 +136,7 @@ public class Debug {
 	}
 
 	private static String GetRobotName(String addr) {
-		final ManagedChannel channel = ManagedChannelBuilder.forTarget(addr).usePlaintext(true).build();
+		final ManagedChannel channel = ManagedChannelBuilder.forTarget(addr).usePlaintext().build();
 		RunnerBlockingStub stub = RunnerGrpc.newBlockingStub(channel);
 		Null request = Null.newBuilder().build();
 		RobotNameResponse resp = stub.robotName(request);

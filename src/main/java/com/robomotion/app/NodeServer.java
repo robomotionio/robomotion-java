@@ -16,7 +16,7 @@ public class NodeServer extends NodeImplBase
 	{
 		try {
 			final ManagedChannel channel = ManagedChannelBuilder.forTarget("127.0.0.1:"+ request.getPort())
-			        .usePlaintext(true)
+			        .usePlaintext()
 			        .build();
 
 			RuntimeHelperGrpc.RuntimeHelperBlockingStub stub = RuntimeHelperGrpc.newBlockingStub(channel);
@@ -76,7 +76,7 @@ public class NodeServer extends NodeImplBase
 			Context ctx = new Message(data);
 			node.OnMessage(ctx);
 
-			byte[] outMessage = ctx.GetRaw();
+			byte[] outMessage = ctx.getRaw();
 			OnMessageResponse response = OnMessageResponse.newBuilder().setOutMessage(ByteString.copyFrom(outMessage)).build();
 			responseObserver.onNext(response);
 			responseObserver.onCompleted();
