@@ -53,6 +53,12 @@ public @interface FieldAnnotations {
 
 	@Retention(RetentionPolicy.RUNTIME)
 	@Target(ElementType.FIELD)
+	public @interface AIScope {
+		boolean aiScope() default true;
+	}
+
+	@Retention(RetentionPolicy.RUNTIME)
+	@Target(ElementType.FIELD)
 	public @interface Input {
 		boolean input() default true;
 	}

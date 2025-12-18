@@ -59,6 +59,12 @@ public class Spec {
 			if (!editor.isEmpty())
 				node.put("editor", editor);
 
+			// Check for Tool field for AI tool support
+			JObject toolInfo = GetToolInfo(c);
+			if (toolInfo != null) {
+				node.put("tool", toolInfo);
+			}
+
 			final JArray properties = new JArray();
 			List<Field> inputs = GetInputs(c);
 			List<Field> inputVars = GetInputVars(c);
@@ -152,6 +158,8 @@ public class Spec {
 						inObject.put("jsScope", true);
 					if (MessageOnly(input))
 						inObject.put("messageOnly", true);
+					if (AIScope(input))
+						inObject.put("aiScope", true);
 
 					String description = GetDescription(input);
 					if (description != "")
@@ -291,6 +299,8 @@ public class Spec {
 						outObject.put("jsScope", true);
 					if (MessageOnly(output))
 						outObject.put("messageOnly", true);
+					if (AIScope(output))
+						outObject.put("aiScope", true);
 
 					String description = GetDescription(output);
 					if (description != "")
@@ -442,6 +452,8 @@ public class Spec {
 						optObject.put("jsScope", true);
 					if (MessageOnly(option))
 						optObject.put("messageOnly", true);
+					if (AIScope(option))
+						optObject.put("aiScope", true);
 
 					String description = GetDescription(option);
 					if (description != "")
@@ -691,36 +703,78 @@ public class Spec {
 	}
 
 	public static String GetTitle(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.title();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Title annotation = c.getAnnotation(NodeAnnotations.Title.class);
 		return annotation == null ? c.getName() : annotation.title();
 	}
 
 	public static String GetColor(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.color();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Color annotation = c.getAnnotation(NodeAnnotations.Color.class);
 		return annotation == null ? "#000" : annotation.color();
 	}
 
 	public static String GetIcon(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.icon();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Icon annotation = c.getAnnotation(NodeAnnotations.Icon.class);
 		return annotation == null ? "" : annotation.icon();
 	}
 
 	public static String GetEditor(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.editor();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Editor annotation = c.getAnnotation(NodeAnnotations.Editor.class);
 		return annotation == null ? "" : annotation.editor();
 	}
 
 	public static String GetNamespace(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.name();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Name annotation = c.getAnnotation(NodeAnnotations.Name.class);
 		return annotation == null ? "" : annotation.name();
 	}
 
 	public static int GetInputCount(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.inputs();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Inputs annotation = c.getAnnotation(NodeAnnotations.Inputs.class);
 		return annotation == null ? 1 : annotation.inputs();
 	}
 
 	public static int GetOutputCount(Class<?> c) {
+		// Check combined annotation first
+		NodeDef nodeDef = c.getAnnotation(NodeDef.class);
+		if (nodeDef != null) {
+			return nodeDef.outputs();
+		}
+		// Fall back to legacy annotation
 		NodeAnnotations.Outputs annotation = c.getAnnotation(NodeAnnotations.Outputs.class);
 		return annotation == null ? 1 : annotation.outputs();
 	}
@@ -819,56 +873,122 @@ public class Spec {
 	}
 
 	public static String GetTitle(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null && !var.title().isEmpty()) {
+			return var.title();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Title annotation = f.getAnnotation(FieldAnnotations.Title.class);
 		return annotation == null ? "" : annotation.title();
 	}
 
 	public static String GetDescription(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null && !var.description().isEmpty()) {
+			return var.description();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Description annotation = f.getAnnotation(FieldAnnotations.Description.class);
 		return annotation == null ? "" : annotation.description();
 	}
 
 	public static String GetFormat(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null && !var.format().isEmpty()) {
+			return var.format();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Format annotation = f.getAnnotation(FieldAnnotations.Format.class);
 		return annotation == null ? "" : annotation.format();
 	}
 
 	public static boolean IsInput(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.type() == Var.VarType.INPUT;
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Input annotation = f.getAnnotation(FieldAnnotations.Input.class);
 		return annotation == null ? false : annotation.input();
 	}
 
 	public static boolean IsOutput(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.type() == Var.VarType.OUTPUT;
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Output annotation = f.getAnnotation(FieldAnnotations.Output.class);
 		return annotation == null ? false : annotation.output();
 	}
 
 	public static boolean IsOption(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.type() == Var.VarType.OPTION;
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Option annotation = f.getAnnotation(FieldAnnotations.Option.class);
 		return annotation == null ? false : annotation.option();
 	}
 
 	public static boolean CustomScope(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.customScope();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.CustomScope annotation = f.getAnnotation(FieldAnnotations.CustomScope.class);
 		return annotation == null ? false : annotation.customScope();
 	}
 
 	public static boolean MessageScope(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.messageScope();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.MessageScope annotation = f.getAnnotation(FieldAnnotations.MessageScope.class);
 		return annotation == null ? false : annotation.messageScope();
 	}
 
 	public static boolean JsScope(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.jsScope();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.JsScope annotation = f.getAnnotation(FieldAnnotations.JsScope.class);
 		return annotation == null ? false : annotation.jsScope();
 	}
 
 	public static boolean MessageOnly(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.messageOnly();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.MessageOnly annotation = f.getAnnotation(FieldAnnotations.MessageOnly.class);
 		return annotation == null ? false : annotation.messageOnly();
 	}
 
 	public static boolean IsHidden(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.hidden();
+		}
+		// Fall back to legacy annotation
 		FieldAnnotations.Hidden annotation = f.getAnnotation(FieldAnnotations.Hidden.class);
 		return annotation == null ? false : annotation.hidden();
 	}
@@ -937,6 +1057,45 @@ public class Spec {
 	public static String[] GetArrayFields(Field f) {
 		FieldAnnotations.ArrayFields annotation = f.getAnnotation(FieldAnnotations.ArrayFields.class);
 		return annotation == null ? null : annotation.arrayFields().split("|");
+	}
+
+	public static boolean AIScope(Field f) {
+		// Check combined annotation first
+		Var var = f.getAnnotation(Var.class);
+		if (var != null) {
+			return var.aiScope();
+		}
+		// Fall back to legacy annotation
+		FieldAnnotations.AIScope annotation = f.getAnnotation(FieldAnnotations.AIScope.class);
+		return annotation == null ? false : annotation.aiScope();
+	}
+
+	/**
+	 * Gets Tool info from a node class if it has a Tool field with @ToolInfo annotation.
+	 */
+	public static JObject GetToolInfo(Class<?> c) {
+		Field[] all = c.getFields();
+
+		for (Field f : all) {
+			if (Tool.class.isAssignableFrom(f.getType())) {
+				Tool.ToolInfo annotation = f.getAnnotation(Tool.ToolInfo.class);
+				if (annotation != null) {
+					String toolName = annotation.name();
+					String toolDescription = annotation.description();
+
+					if (toolName != null && !toolName.isEmpty()) {
+						JObject toolInfo = new JObject();
+						toolInfo.put("name", toolName);
+						if (toolDescription != null && !toolDescription.isEmpty()) {
+							toolInfo.put("description", toolDescription);
+						}
+						return toolInfo;
+					}
+				}
+			}
+		}
+
+		return null;
 	}
 
 	private static String ToSnakeCase(String text) {
