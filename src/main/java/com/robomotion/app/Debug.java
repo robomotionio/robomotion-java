@@ -47,6 +47,10 @@ public class Debug {
 		AttachConfig cfg = new AttachConfig(ProtocolGRPC, gAddr, pid, ns);
 
 		byte[] cfgData = Runtime.Serialize(cfg);
+		if (cfgData == null) {
+			System.out.println("Failed to serialize attach config");
+			System.exit(1);
+		}
 
 		try {
 			attachedTo = GetRPCAddr();
