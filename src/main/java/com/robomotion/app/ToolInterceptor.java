@@ -108,9 +108,10 @@ public class ToolInterceptor {
 
                         // Get the value from context if it's a Message scope variable
                         if ("Message".equals(variable.scope)) {
-                            Object value = ctx.get(variable.name);
+                            String varName = variable.getNameString();
+                            Object value = ctx.get(varName);
                             if (value != null) {
-                                outputData.put(variable.name, value);
+                                outputData.put(varName, value);
                             }
                         }
                     }
