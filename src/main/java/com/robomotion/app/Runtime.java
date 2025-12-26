@@ -25,6 +25,8 @@ import com.google.protobuf.Value;
 import io.grpc.ConnectivityState;
 import io.grpc.ManagedChannel;
 
+import com.robomotion.testing.TestRuntimeHelper;
+
 /**
  * Runtime provides static utilities for node registration, variable access,
  * vault operations, and runtime communication with the Robomotion platform.
@@ -36,6 +38,9 @@ public class Runtime {
     public static int activeNodes = 0;
     public static Boolean started = false;
     private static List<Class<?>> handlers;
+
+    // Test helper for unit testing support
+    static TestRuntimeHelper testHelper;
 
     // Properties for configuration
     private static Properties props = new Properties();
@@ -201,7 +206,7 @@ public class Runtime {
         if (variable.scope.equals("Custom"))
             return (T) variable.name;
         if (variable.scope.equals("Message")) {
-            return (T) ctx.get(variable.name);
+            return (T) ctx.get(variable.getNameString());
         }
 
         if (client == null)
@@ -209,7 +214,7 @@ public class Runtime {
 
         com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder()
                 .setScope(variable.scope)
-                .setName(variable.name)
+                .setName(variable.getNameString())
                 .setPayload(ByteString.copyFrom(ctx.getRaw()))
                 .build();
 
@@ -222,7 +227,7 @@ public class Runtime {
 
     public static <T> void SetVariable(Variable<T> variable, Context ctx, T value) throws RuntimeNotInitializedException {
         if (variable.scope.equals("Message")) {
-            ctx.set(variable.name, value);
+            ctx.set(variable.getNameString(), value);
             return;
         }
 
@@ -234,7 +239,7 @@ public class Runtime {
 
         com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder()
                 .setScope(variable.scope)
-                .setName(variable.name)
+                .setName(variable.getNameString())
                 .build();
 
         SetVariableRequest request = SetVariableRequest.newBuilder().setVariable(var).setValue(st).build();
@@ -493,16 +498,34 @@ public class Runtime {
     // Variable types
     public static class Variable<T> {
         public String scope;
-        public String name;
+        public Object name;  // Object to support Custom scope with any value type
 
         public Variable(String scope, String name) {
             this.scope = scope;
             this.name = name;
         }
+
+        public Variable(String scope, Object name) {
+            this.scope = scope;
+            this.name = name;
+        }
+
+        /**
+         * Gets the name as a String (for Message scope path usage).
+         *
+         * @return The name as a String
+         */
+        public String getNameString() {
+            return name != null ? name.toString() : null;
+        }
     }
 
     public static class InVariable<T> extends Variable<T> {
         public InVariable(String scope, String name) {
+            super(scope, name);
+        }
+
+        public InVariable(String scope, Object name) {
             super(scope, name);
         }
 
@@ -516,6 +539,10 @@ public class Runtime {
             super(scope, name);
         }
 
+        public OutVariable(String scope, Object name) {
+            super(scope, name);
+        }
+
         public void Set(Context ctx, T value) throws RuntimeNotInitializedException {
             Runtime.SetVariable(this, ctx, value);
         }
@@ -523,6 +550,10 @@ public class Runtime {
 
     public static class OptVariable<T> extends Variable<T> {
         public OptVariable(String scope, String name) {
+            super(scope, name);
+        }
+
+        public OptVariable(String scope, Object name) {
             super(scope, name);
         }
 
@@ -550,9 +581,6 @@ public class Runtime {
         }
 
         public Map<String, Object> Get(Context ctx) throws RuntimeNotInitializedException {
-            if (client == null)
-                throw new RuntimeNotInitializedException();
-
             CredentialInfo creds;
             if (this.vaultId != null && this.itemId != null) {
                 creds = new CredentialInfo(this.vaultId, this.itemId);
@@ -566,6 +594,17 @@ public class Runtime {
                 Map<String, Object> crMap = (Map<String, Object>) cr;
                 creds = new CredentialInfo((String) crMap.get("vaultId"), (String) crMap.get("itemId"));
             }
+
+            // Check for test helper first (for unit testing)
+            if (testHelper != null) {
+                Map<String, Object> testResult = testHelper.getVaultItem(creds.vaultId, creds.itemId);
+                if (testResult != null) {
+                    return testResult;
+                }
+            }
+
+            if (client == null)
+                throw new RuntimeNotInitializedException();
 
             GetVaultItemRequest request = GetVaultItemRequest.newBuilder()
                     .setItemId(creds.itemId)
