@@ -54,12 +54,6 @@
     "allDeclaredConstructors": true
   },
   {
-    "name": "com.robomotion.app.LargeMessageObject",
-    "allDeclaredFields": true,
-    "allDeclaredMethods": true,
-    "allDeclaredConstructors": true
-  },
-  {
     "name": "com.robomotion.app.Message",
     "allDeclaredFields": true,
     "allDeclaredMethods": true,

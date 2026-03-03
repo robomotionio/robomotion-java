@@ -48,7 +48,7 @@ public class Runtime {
 
     // Capability flags
     public static final long CAPABILITY_LMO = 1L;
-    private static long packageCapabilities = CAPABILITY_LMO;
+    static long packageCapabilities = CAPABILITY_LMO;
 
     // Static initialization
     static {
