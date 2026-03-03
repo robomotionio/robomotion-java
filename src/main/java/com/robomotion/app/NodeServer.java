@@ -70,8 +70,9 @@ public class NodeServer extends NodeImplBase
 	public void onMessage(OnMessageRequest request, StreamObserver<OnMessageResponse> responseObserver)
 	{
 		byte[] data = Runtime.Decompress(request.getInMessage().toByteArray());
+		data = LMO.resolveAll(data);
 		Node node = Runtime.Nodes().get(request.getGuid());
-		
+
 		try {
 			Context ctx = new Message(data);
 			node.OnMessage(ctx);
@@ -98,6 +99,16 @@ public class NodeServer extends NodeImplBase
 		}
 	}
 	
+	@Override
+	public void getCapabilities(Empty request, StreamObserver<GetCapabilitiesResponse> responseObserver)
+	{
+		GetCapabilitiesResponse response = GetCapabilitiesResponse.newBuilder()
+				.setCapabilities(Runtime.packageCapabilities)
+				.build();
+		responseObserver.onNext(response);
+		responseObserver.onCompleted();
+	}
+
 	@Override
 	public void onClose(OnCloseRequest request, StreamObserver<OnCloseResponse> responseObserver)
 	{
