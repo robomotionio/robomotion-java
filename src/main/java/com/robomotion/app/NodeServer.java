@@ -24,26 +24,28 @@ public class NodeServer extends NodeImplBase
 			RuntimeHelperGrpc.RuntimeHelperBlockingStub stub = RuntimeHelperGrpc.newBlockingStub(channel);
 			Runtime.SetClient(stub);
 
-			// Fetch robot capabilities and LMO store path.
-			try {
-				Map<String, Object> info = Runtime.GetRobotInfo();
-				Object capsObj = info.get("capabilities");
-				if (capsObj instanceof Number) {
-					Runtime.SetRobotCapabilities(((Number) capsObj).longValue());
-				}
-				Object storePath = info.get("lmo_store_path");
-				if (storePath != null && !storePath.toString().isEmpty()) {
-					LMO.init(storePath.toString());
-				}
-			} catch (Exception ex) {
-				System.err.println("lmo: init during startup: " + ex.getMessage());
-			}
-
+			// Fetch robot capabilities and LMO store path asynchronously.
+			// Must NOT call GetRobotInfo() synchronously here — the host is
+			// waiting for Init() to return before it can handle callbacks,
+			// so a synchronous gRPC call back to the host would deadlock.
 			new Thread(new Runnable() {
 			    public void run() {
+					try {
+						Map<String, Object> info = Runtime.GetRobotInfo();
+						Object capsObj = info.get("capabilities");
+						if (capsObj instanceof Number) {
+							Runtime.SetRobotCapabilities(((Number) capsObj).longValue());
+						}
+						Object storePath = info.get("lmo_store_path");
+						if (storePath != null && !storePath.toString().isEmpty()) {
+							LMO.init(storePath.toString());
+						}
+					} catch (Exception ex) {
+						System.err.println("lmo: init during startup: " + ex.getMessage());
+					}
 					Runtime.CheckRunnerConn(channel);
 			    }
-			}).start(); 
+			}).start();
 			
 			responseObserver.onNext(Empty.newBuilder().build());
 			responseObserver.onCompleted();
