@@ -1,5 +1,6 @@
 package com.robomotion.app;
 
+import com.google.gson.Gson;
 import com.robomotion.testing.MockContext;
 
 import org.junit.jupiter.api.AfterEach;
@@ -405,10 +406,11 @@ class LMOTest {
 
         @Test
         void packLargeObjectField() {
+            // Inner object must be >= 4096 bytes with no individually large children
             StringBuilder sb = new StringBuilder("{\"obj\":{");
-            for (int i = 0; i < 200; i++) {
+            for (int i = 0; i < 500; i++) {
                 if (i > 0) sb.append(",");
-                sb.append("\"k").append(i).append("\":\"v").append(i).append("\"");
+                sb.append("\"key").append(i).append("\":\"value").append(i).append("\"");
             }
             sb.append("}}");
             byte[] data = sb.toString().getBytes(StandardCharsets.UTF_8);
@@ -558,28 +560,39 @@ class LMOTest {
         }
 
         @Test
-        void packsLargeString() {
-            Object result = LMO.packValue("B".repeat(5000));
-            assertNotNull(result);
-            assertTrue(LMO.isBlobRefMap(result));
+        void bareStringReturnsNull() {
+            // pack() requires a JSON object at top level; bare strings are
+            // handled by the whole-message pack in NodeServer.onMessage
+            assertNull(LMO.packValue("B".repeat(5000)));
         }
 
         @Test
-        void packsLargeMap() {
-            Map<String, Object> large = new HashMap<>();
-            for (int i = 0; i < 200; i++) {
-                large.put("key" + i, "value" + i);
-            }
-            assertNotNull(LMO.packValue(large));
-        }
-
-        @Test
-        void packsLargeList() {
+        void bareListReturnsNull() {
             List<String> large = new java.util.ArrayList<>();
             for (int i = 0; i < 500; i++) {
                 large.add("item" + i);
             }
-            assertNotNull(LMO.packValue(large));
+            assertNull(LMO.packValue(large));
+        }
+
+        @Test
+        void packsMapWithLargeField() {
+            Map<String, Object> m = new HashMap<>();
+            m.put("big", "V".repeat(5000));
+            m.put("small", "ok");
+            Object result = LMO.packValue(m);
+            assertNotNull(result, "map with a large field should be packed");
+            assertInstanceOf(Map.class, result);
+        }
+
+        @Test
+        void flatMapWithSmallFieldsReturnsNull() {
+            // No individual field >= 4096 and root object is never extracted by pack()
+            Map<String, Object> flat = new HashMap<>();
+            for (int i = 0; i < 200; i++) {
+                flat.put("key" + i, "val" + i);
+            }
+            assertNull(LMO.packValue(flat));
         }
 
         @Test
@@ -593,15 +606,22 @@ class LMOTest {
         }
 
         @Test
-        void packedValueCanBeResolved() throws Exception {
-            String large = "C".repeat(5000);
-            Object packed = LMO.packValue(large);
-            assertNotNull(packed);
-            assertTrue(LMO.isBlobRefMap(packed));
+        void packedMapCanBeResolved() throws Exception {
+            Map<String, Object> original = new HashMap<>();
+            original.put("data", "C".repeat(5000));
+            original.put("tag", "test");
 
-            @SuppressWarnings("unchecked")
-            Map<String, Object> blobRef = (Map<String, Object>) packed;
-            assertEquals(large, LMO.resolveBlobRefValue(blobRef));
+            Object packed = LMO.packValue(original);
+            assertNotNull(packed);
+
+            // The packed result is a map where the large field is a BlobRef.
+            // Resolving the whole message should restore the original data.
+            Gson gson = new com.google.gson.Gson();
+            byte[] packedBytes = gson.toJson(packed).getBytes(StandardCharsets.UTF_8);
+            byte[] resolved = LMO.resolveAll(packedBytes);
+            String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
+            assertTrue(resolvedStr.contains("C".repeat(5000)));
+            assertTrue(resolvedStr.contains("\"tag\":\"test\""));
         }
     }
 
@@ -673,9 +693,9 @@ class LMOTest {
         @Test
         void packedObjectHasTypeObject() {
             StringBuilder sb = new StringBuilder("{\"obj\":{");
-            for (int i = 0; i < 200; i++) {
+            for (int i = 0; i < 500; i++) {
                 if (i > 0) sb.append(",");
-                sb.append("\"k").append(i).append("\":\"v").append(i).append("\"");
+                sb.append("\"key").append(i).append("\":\"value").append(i).append("\"");
             }
             sb.append("}}");
             String packedStr = new String(LMO.pack(sb.toString().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
@@ -741,13 +761,34 @@ class LMOTest {
         }
 
         @Test
-        void setVariablePacksLargeValueInMessageScope() throws Exception {
+        @SuppressWarnings("unchecked")
+        void setVariablePacksMapWithLargeField() throws Exception {
+            MockContext ctx = new MockContext();
+
+            Map<String, Object> largeMap = new HashMap<>();
+            largeMap.put("data", "E".repeat(5000));
+            largeMap.put("tag", "test");
+
+            Runtime.OutVariable<Map<String, Object>> variable = new Runtime.OutVariable<>("Message", "output");
+            variable.Set(ctx, largeMap);
+
+            // The stored value should have the large field replaced with a BlobRef
+            Object stored = ctx.get("output");
+            assertInstanceOf(Map.class, stored);
+            Map<String, Object> storedMap = (Map<String, Object>) stored;
+            // The "data" field should be a BlobRef since it's >= 4096
+            assertTrue(LMO.isBlobRefMap(storedMap.get("data")),
+                    "large field should be stored as BlobRef");
+        }
+
+        @Test
+        void setVariableBareStringNotPackedByPackValue() throws Exception {
+            // Bare strings don't get packed by packValue (not a JSON object).
+            // They get packed later by LMO.pack(ctx.getRaw()) in NodeServer.onMessage.
             MockContext ctx = new MockContext();
             Runtime.OutVariable<String> variable = new Runtime.OutVariable<>("Message", "output");
             variable.Set(ctx, "E".repeat(5000));
-
-            assertTrue(LMO.isBlobRefMap(ctx.get("output")),
-                    "large value should be stored as BlobRef");
+            assertEquals("E".repeat(5000), ctx.get("output"));
         }
 
         @Test
@@ -771,15 +812,40 @@ class LMOTest {
         }
 
         @Test
-        void roundtripThroughSetAndGetVariable() throws Exception {
+        void roundtripThroughMessageLevelPackResolve() throws Exception {
+            // The full roundtrip for large values goes through the message-level
+            // pack/resolve in NodeServer.onMessage, not per-variable packValue.
             MockContext ctx = new MockContext();
+            ctx.set("content", "G".repeat(5000));
 
-            String largeValue = "G".repeat(5000);
-            Runtime.OutVariable<String> outVar = new Runtime.OutVariable<>("Message", "field");
-            outVar.Set(ctx, largeValue);
+            // Pack the whole message (simulates NodeServer outgoing path)
+            byte[] packed = LMO.pack(ctx.getRaw());
+            String packedStr = new String(packed, StandardCharsets.UTF_8);
+            assertTrue(packedStr.contains("__magic"));
+            assertFalse(packedStr.contains("GGGGG"));
+
+            // Resolve (simulates NodeServer incoming path)
+            byte[] resolved = LMO.resolveAll(packed);
+            MockContext resolved_ctx = new MockContext(resolved);
+            assertEquals("G".repeat(5000), resolved_ctx.get("content"));
+        }
+
+        @Test
+        void roundtripVariableWithBlobRefValue() throws Exception {
+            // When the entire variable value IS a BlobRef (e.g. set by another package),
+            // GetVariable resolves it inline.
+            String ref = LMO.putBlob("\"full blob value\"".getBytes(StandardCharsets.UTF_8));
+
+            Map<String, Object> blobRef = new HashMap<>();
+            blobRef.put("__magic", (double) LMO.MAGIC);
+            blobRef.put("__ref", ref);
+            blobRef.put("__path", STORE_PATH);
+
+            MockContext ctx = new MockContext();
+            ctx.set("field", blobRef);
 
             Runtime.InVariable<Object> inVar = new Runtime.InVariable<>("Message", "field");
-            assertEquals(largeValue, inVar.Get(ctx));
+            assertEquals("full blob value", inVar.Get(ctx));
         }
 
         @Test
