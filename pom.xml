@@ -259,11 +259,18 @@
 			<version>2.0.11</version>
 		</dependency>
 
-		<!-- Zstd compression (for LMO blob decompression) -->
+		<!-- Zstd compression (for LMO blob store) -->
 		<dependency>
 			<groupId>com.github.luben</groupId>
 			<artifactId>zstd-jni</artifactId>
 			<version>1.5.5-11</version>
+		</dependency>
+
+		<!-- XXH3-128 hashing (for LMO content-addressed blobs) -->
+		<dependency>
+			<groupId>net.openhft</groupId>
+			<artifactId>zero-allocation-hashing</artifactId>
+			<version>0.16</version>
 		</dependency>
 
 	</dependencies>
