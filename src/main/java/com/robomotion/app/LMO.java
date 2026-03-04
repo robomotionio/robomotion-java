@@ -31,12 +31,11 @@ public class LMO {
     private static String relPath;
 
     /**
-     * Initialise the store for the current flow.
-     * root = configDir/store/robots/{robotID}/flows/{flowID}
-     * relPath = robots/{robotID}/flows/{flowID}
+     * Initialise the store with the given relative store path.
+     * root = configDir/store/{storePath}
      */
-    static synchronized void init(String robotID, String flowID) throws Exception {
-        relPath = Paths.get("robots", robotID, "flows", flowID).toString();
+    static synchronized void init(String storePath) throws Exception {
+        relPath = storePath;
         root = Paths.get(getConfigDir(), "store", relPath).toString();
 
         Path blobDir = Paths.get(root, "blobs");
@@ -44,7 +43,7 @@ public class LMO {
     }
 
     /**
-     * Lazily initialise the store if not yet done.
+     * Lazily initialise the store using lmo_store_path from GetRobotInfo().
      */
     @SuppressWarnings("unchecked")
     private static synchronized void ensureInit() {
@@ -53,9 +52,11 @@ public class LMO {
         }
         try {
             Map<String, Object> info = Runtime.GetRobotInfo();
-            String robotID = info.get("id") != null ? info.get("id").toString() : "";
-            String flowID = info.get("flow_id") != null ? info.get("flow_id").toString() : "";
-            init(robotID, flowID);
+            Object storePath = info.get("lmo_store_path");
+            if (storePath == null || storePath.toString().isEmpty()) {
+                return;
+            }
+            init(storePath.toString());
         } catch (Exception e) {
             System.err.println("lmo: failed to init store: " + e.getMessage());
         }
