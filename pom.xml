@@ -72,6 +72,13 @@
 				</configuration>
 			</plugin>
 
+			<!-- Surefire for JUnit 5 tests -->
+			<plugin>
+				<groupId>org.apache.maven.plugins</groupId>
+				<artifactId>maven-surefire-plugin</artifactId>
+				<version>3.2.3</version>
+			</plugin>
+
 			<!-- Shade plugin for uber-jar (needed for native-image) -->
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
@@ -271,6 +278,14 @@
 			<groupId>net.openhft</groupId>
 			<artifactId>zero-allocation-hashing</artifactId>
 			<version>0.16</version>
+		</dependency>
+
+		<!-- Testing -->
+		<dependency>
+			<groupId>org.junit.jupiter</groupId>
+			<artifactId>junit-jupiter</artifactId>
+			<version>5.10.1</version>
+			<scope>test</scope>
 		</dependency>
 
 	</dependencies>

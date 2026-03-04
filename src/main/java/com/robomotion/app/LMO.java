@@ -1,6 +1,7 @@
 package com.robomotion.app;
 
 import com.github.luben.zstd.Zstd;
+import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -27,6 +28,8 @@ public class LMO {
     private static final LongTupleHashFunction xxh128 = LongTupleHashFunction.xx128();
 
     // Store state — lazily initialised on first use.
+    // configDir is stored once at init time, matching Go's Store.configDir field.
+    private static String configDir;
     private static String root;
     private static String relPath;
 
@@ -36,7 +39,8 @@ public class LMO {
      */
     static synchronized void init(String storePath) throws Exception {
         relPath = storePath;
-        root = Paths.get(getConfigDir(), "store", relPath).toString();
+        configDir = getConfigDir();
+        root = Paths.get(configDir, "store", relPath).toString();
 
         Path blobDir = Paths.get(root, "blobs");
         Files.createDirectories(blobDir);
@@ -299,13 +303,14 @@ public class LMO {
 
     /**
      * Reads and decompresses a blob identified by its ref from the given store path.
+     * Uses the stored configDir (set once at init), matching Go's Store.configDir field.
      */
     static byte[] getBlob(String ref, String storePath) throws Exception {
         String hash = ref.startsWith("xxh3:") ? ref.substring(5) : ref;
         String dir = hash.substring(0, 2);
         String file = hash.substring(2);
 
-        Path blobFile = Paths.get(getConfigDir(), "store", storePath, "blobs", dir, file);
+        Path blobFile = Paths.get(configDir, "store", storePath, "blobs", dir, file);
         byte[] compressed = Files.readAllBytes(blobFile);
         return Zstd.decompress(compressed, (int) Zstd.decompressedSize(compressed));
     }
@@ -362,6 +367,103 @@ public class LMO {
         return "xxh3:" + String.format("%016x%016x", hi, lo);
     }
 
+    // --- Map-based BlobRef helpers (for variable access) ---
+
+    /**
+     * Checks if a Map value is a BlobRef marker.
+     * Mirrors Go's lmo.IsBlobRefMap().
+     */
+    @SuppressWarnings("unchecked")
+    public static boolean isBlobRefMap(Object val) {
+        if (!(val instanceof Map)) {
+            return false;
+        }
+        Map<String, Object> m = (Map<String, Object>) val;
+        Object magic = m.get("__magic");
+        Object ref = m.get("__ref");
+        if (magic == null || ref == null) {
+            return false;
+        }
+        long magicVal;
+        if (magic instanceof Number) {
+            magicVal = ((Number) magic).longValue();
+        } else {
+            return false;
+        }
+        String refStr = ref.toString();
+        return magicVal == MAGIC && !refStr.isEmpty();
+    }
+
+    /**
+     * Resolves a BlobRef from a Map value.
+     * Reads the blob via __ref/__path, deserializes, and learns relPath from first BlobRef.
+     * Mirrors Go's ResolveBlobRefValue().
+     */
+    @SuppressWarnings("unchecked")
+    public static Object resolveBlobRefValue(Map<String, Object> m) throws Exception {
+        String ref = m.get("__ref") != null ? m.get("__ref").toString() : "";
+        String path = m.get("__path") != null ? m.get("__path").toString() : "";
+        if (ref.isEmpty()) {
+            throw new Exception("lmo: missing __ref");
+        }
+
+        // Learn relPath from the first BlobRef we encounter.
+        if (relPath == null && !path.isEmpty()) {
+            init(path);
+        }
+
+        byte[] blob = getBlob(ref, path);
+        String json = new String(blob, StandardCharsets.UTF_8);
+        Gson gson = new Gson();
+        return gson.fromJson(json, Object.class);
+    }
+
+    /**
+     * Marshals a value to JSON and packs it into the blob store if it exceeds
+     * the threshold. Returns the packed BlobRef map if packed, or null if the
+     * value is small enough to send inline.
+     * Mirrors Go's PackValue().
+     */
+    public static Object packValue(Object value) {
+        if (root == null || relPath == null) {
+            return null;
+        }
+
+        try {
+            Gson gson = new Gson();
+            String json = gson.toJson(value);
+            byte[] data = json.getBytes(StandardCharsets.UTF_8);
+
+            if (data.length < THRESHOLD) {
+                return null;
+            }
+
+            byte[] packed = pack(data);
+            if (packed == data) {
+                // pack() returned the same reference — nothing was packed
+                return null;
+            }
+
+            String packedJson = new String(packed, StandardCharsets.UTF_8);
+            Object result = gson.fromJson(packedJson, Object.class);
+
+            // Check if the result itself is a BlobRef
+            if (isBlobRefMap(result)) {
+                return result;
+            }
+
+            // Pack may have replaced children but not the root
+            if (packed.length < data.length) {
+                return result;
+            }
+
+            return null;
+        } catch (Exception e) {
+            System.err.println("lmo: packValue error: " + e.getMessage());
+            return null;
+        }
+    }
+
     /**
      * Returns the platform-specific config directory.
      */
@@ -372,5 +474,35 @@ public class LMO {
             return home + "\\AppData\\Local\\Robomotion";
         }
         return home + "/.config/robomotion";
+    }
+
+    // --- Test helpers (package-private) ---
+
+    /**
+     * Initialise the store with an explicit config directory and store path (for testing).
+     * Mirrors Go's NewStore(configDir) + SetRelPath(storePath).
+     */
+    static synchronized void initForTesting(String testConfigDir, String storePath) throws Exception {
+        configDir = testConfigDir;
+        relPath = storePath;
+        root = Paths.get(configDir, "store", relPath).toString();
+        Path blobDir = Paths.get(root, "blobs");
+        Files.createDirectories(blobDir);
+    }
+
+    /**
+     * Reset store state (for testing).
+     */
+    static synchronized void reset() {
+        configDir = null;
+        root = null;
+        relPath = null;
+    }
+
+    /**
+     * Returns the current relPath (for testing).
+     */
+    static String getRelPath() {
+        return relPath;
     }
 }
