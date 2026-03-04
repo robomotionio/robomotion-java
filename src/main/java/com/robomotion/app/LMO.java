@@ -193,7 +193,8 @@ public class LMO {
             JsonPrimitive prim = value.getAsJsonPrimitive();
             if (prim.isString()) {
                 br.addProperty("__type", "string");
-                br.addProperty("__len", prim.getAsString().length());
+                String s = prim.getAsString();
+                br.addProperty("__len", s.codePointCount(0, s.length()));
             } else if (prim.isNumber()) {
                 br.addProperty("__type", "number");
             } else if (prim.isBoolean()) {
