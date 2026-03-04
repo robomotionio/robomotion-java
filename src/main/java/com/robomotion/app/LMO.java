@@ -44,6 +44,7 @@ public class LMO {
 
     /**
      * Lazily initialise the store using lmo_store_path from GetRobotInfo().
+     * The path is an opaque string computed by the deskbot runtime.
      */
     @SuppressWarnings("unchecked")
     private static synchronized void ensureInit() {
@@ -126,16 +127,15 @@ public class LMO {
             return null;
         }
 
-        String raw = value.toString();
-
         // Object: recurse into children
         if (value.isJsonObject()) {
             return extractObject(value.getAsJsonObject());
         }
 
-        // Array or scalar: extract if large
-        if (raw.length() >= THRESHOLD) {
-            return buildBlobRefElement(raw.getBytes(StandardCharsets.UTF_8), value);
+        // Array or scalar: extract if large (use byte length to match Go's len())
+        byte[] rawBytes = value.toString().getBytes(StandardCharsets.UTF_8);
+        if (rawBytes.length >= THRESHOLD) {
+            return buildBlobRefElement(rawBytes, value);
         }
 
         return null;
@@ -145,10 +145,10 @@ public class LMO {
      * Recurses into a JSON object, extracting large leaves.
      */
     private static JsonElement extractObject(JsonObject obj) throws Exception {
-        String raw = obj.toString();
+        byte[] rawBytes = obj.toString().getBytes(StandardCharsets.UTF_8);
 
-        // If the whole object is small, skip
-        if (raw.length() < THRESHOLD) {
+        // If the whole object is small, skip (use byte length to match Go's len())
+        if (rawBytes.length < THRESHOLD) {
             return null;
         }
 
@@ -165,7 +165,7 @@ public class LMO {
         if (!modified) {
             // Object is large but no individual children were large enough.
             // Extract the whole object as a blob.
-            return buildBlobRefElement(raw.getBytes(StandardCharsets.UTF_8), obj);
+            return buildBlobRefElement(rawBytes, obj);
         }
 
         return obj;
@@ -176,7 +176,6 @@ public class LMO {
      */
     private static JsonElement buildBlobRefElement(byte[] rawBytes, JsonElement value) throws Exception {
         String ref = putBlob(rawBytes);
-        String raw = new String(rawBytes, StandardCharsets.UTF_8);
 
         JsonObject br = new JsonObject();
         br.addProperty("__ref", ref);
