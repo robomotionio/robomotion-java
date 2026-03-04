@@ -1,5 +1,7 @@
 package com.robomotion.app;
 
+import java.util.Map;
+
 import io.grpc.ManagedChannel;
 import io.grpc.ManagedChannelBuilder;
 import io.grpc.Status;
@@ -21,7 +23,22 @@ public class NodeServer extends NodeImplBase
 
 			RuntimeHelperGrpc.RuntimeHelperBlockingStub stub = RuntimeHelperGrpc.newBlockingStub(channel);
 			Runtime.SetClient(stub);
-			
+
+			// Fetch robot capabilities and LMO store path.
+			try {
+				Map<String, Object> info = Runtime.GetRobotInfo();
+				Object capsObj = info.get("capabilities");
+				if (capsObj instanceof Number) {
+					Runtime.SetRobotCapabilities(((Number) capsObj).longValue());
+				}
+				Object storePath = info.get("lmo_store_path");
+				if (storePath != null && !storePath.toString().isEmpty()) {
+					LMO.init(storePath.toString());
+				}
+			} catch (Exception ex) {
+				System.err.println("lmo: init during startup: " + ex.getMessage());
+			}
+
 			new Thread(new Runnable() {
 			    public void run() {
 					Runtime.CheckRunnerConn(channel);
