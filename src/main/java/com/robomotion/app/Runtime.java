@@ -47,8 +47,9 @@ public class Runtime {
     private static Map<String, Object> robotInfo;
 
     // Capability flags
-    public static final long CAPABILITY_LMO = 1L;
-    private static long packageCapabilities = CAPABILITY_LMO;
+    public static final long CAPABILITY_LMO = 1L << 4;  // bit 4: content-addressed blob store
+    static long packageCapabilities = CAPABILITY_LMO;
+    private static long robotCapabilities = 0L;
 
     // Static initialization
     static {
@@ -206,7 +207,15 @@ public class Runtime {
         if (variable.scope.equals("Custom"))
             return (T) variable.name;
         if (variable.scope.equals("Message")) {
-            return (T) ctx.get(variable.getNameString());
+            Object val = ctx.get(variable.getNameString());
+            if (val != null && LMO.isBlobRefMap(val)) {
+                try {
+                    val = LMO.resolveBlobRefValue((Map<String, Object>) val);
+                } catch (Exception e) {
+                    System.err.println("lmo: resolve blob ref: " + e.getMessage());
+                }
+            }
+            return (T) val;
         }
 
         if (client == null)
@@ -222,11 +231,26 @@ public class Runtime {
 
         GetVariableResponse response = client.getVariable(request);
         Struct st = new Struct(response.getValue());
-        return (T) st.Parse();
+        Object val = st.Parse();
+        if (val != null && LMO.isBlobRefMap(val)) {
+            try {
+                val = LMO.resolveBlobRefValue((Map<String, Object>) val);
+            } catch (Exception e) {
+                System.err.println("lmo: resolve blob ref: " + e.getMessage());
+            }
+        }
+        return (T) val;
     }
 
     public static <T> void SetVariable(Variable<T> variable, Context ctx, T value) throws RuntimeNotInitializedException {
         if (variable.scope.equals("Message")) {
+            if (IsLMOCapable()) {
+                Object packed = LMO.packValue(value);
+                if (packed != null) {
+                    ctx.set(variable.getNameString(), packed);
+                    return;
+                }
+            }
             ctx.set(variable.getNameString(), value);
             return;
         }
@@ -234,7 +258,15 @@ public class Runtime {
         if (client == null)
             throw new RuntimeNotInitializedException();
 
-        Value val = Struct.ToValue(value);
+        Object sendValue = value;
+        if (IsLMOCapable()) {
+            Object packed = LMO.packValue(value);
+            if (packed != null) {
+                sendValue = packed;
+            }
+        }
+
+        Value val = Struct.ToValue(sendValue);
         com.google.protobuf.Struct st = com.google.protobuf.Struct.newBuilder().putFields("value", val).build();
 
         com.robomotion.app.Variable var = com.robomotion.app.Variable.newBuilder()
@@ -273,21 +305,21 @@ public class Runtime {
         return id != null ? id.toString() : "";
     }
 
-    // Capability check
-    @SuppressWarnings("unchecked")
+    // Capability methods
+    static void SetRobotCapabilities(long caps) {
+        robotCapabilities = caps;
+    }
+
+    public static long GetCapabilities() {
+        return robotCapabilities & packageCapabilities;
+    }
+
+    public static boolean HasCapability(long capability) {
+        return (GetCapabilities() & capability) != 0;
+    }
+
     public static boolean IsLMOCapable() {
-        try {
-            Map<String, Object> info = GetRobotInfo();
-            Object capsObj = info.get("capabilities");
-            if (capsObj instanceof Map) {
-                Map<String, Object> caps = (Map<String, Object>) capsObj;
-                Object lmo = caps.get("lmo");
-                return Boolean.TRUE.equals(lmo);
-            }
-        } catch (Exception e) {
-            // Ignore
-        }
-        return false;
+        return HasCapability(CAPABILITY_LMO);
     }
 
     // Event emission methods
