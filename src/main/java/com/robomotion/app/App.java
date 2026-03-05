@@ -32,6 +32,13 @@ public class App {
 	public static Initializer initializer = null;
 
 	public static void Start(String[] args) {
+		// Suppress Netty/gRPC warnings on Java 21+.
+		// Must be set before any Netty classes are loaded.
+		// grpc-netty-shaded relocates property names to io.grpc.netty.shaded.io.netty.*
+		System.setProperty("io.grpc.netty.shaded.io.netty.noUnsafe", "true");
+		System.setProperty("io.grpc.netty.shaded.io.netty.leakDetection.level", "DISABLED");
+		System.setProperty("io.grpc.netty.shaded.io.netty.transport.noNative", "true");
+
 		try {
 			if (args.length > 0) { // start with arg
 				String arg = args[0];
