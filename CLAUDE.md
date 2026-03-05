@@ -139,6 +139,15 @@ public class AISearchNode extends Node {
 - `GatewayRequest()`, `ProxyRequest()` - HTTP gateway/proxy
 - `GetRobotInfo()`, `GetPortConnections()`, `GetInstanceAccess()`, `IsRunning()`
 
+## Important: After Tagging a New Version
+
+After pushing a new version tag (e.g., `v2.2.0`), you **must** update the SDK clone branch in the packages-main CI pipeline:
+
+- File: `packages-main/.github/workflows/Deploy.yml` (line ~307)
+- Update: `git clone --depth 1 --branch v<NEW_VERSION> ...`
+
+Without this, Java package builds will silently fail in CI because Maven can't resolve the new SDK version.
+
 ## Key Dependencies
 - Java 21 LTS
 - gRPC 1.60.1
