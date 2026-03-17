@@ -96,7 +96,7 @@ public class NodeServer extends NodeImplBase
 			Context ctx = new Message(data);
 			node.OnMessage(ctx);
 
-			byte[] outMessage = LMO.pack(ctx.getRaw());
+			byte[] outMessage = Runtime.IsLMOCapable() ? LMO.pack(ctx.getRaw()) : ctx.getRaw();
 			OnMessageResponse response = OnMessageResponse.newBuilder().setOutMessage(ByteString.copyFrom(outMessage)).build();
 			responseObserver.onNext(response);
 			responseObserver.onCompleted();
