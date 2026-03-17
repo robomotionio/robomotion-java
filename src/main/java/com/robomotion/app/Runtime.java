@@ -42,6 +42,12 @@ public class Runtime {
     // Test helper for unit testing support
     static TestRuntimeHelper testHelper;
 
+    // CLI mode flag — when true, emit/event methods use stubs instead of gRPC
+    static boolean cliMode = false;
+
+    // Session mode flag — when true, don't exit after last node closes
+    static boolean sessionMode = false;
+
     // Properties for configuration
     private static Properties props = new Properties();
     private static Map<String, Object> robotInfo;
@@ -195,6 +201,8 @@ public class Runtime {
 
     // Runtime helper methods
     public static void Close() throws RuntimeNotInitializedException {
+        if (cliMode) return;
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -281,6 +289,10 @@ public class Runtime {
     // Robot info methods
     @SuppressWarnings("unchecked")
     public static Map<String, Object> GetRobotInfo() throws RuntimeNotInitializedException {
+        if (cliMode) {
+            return Map.of("id", "cli", "flow_id", "cli");
+        }
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -324,6 +336,13 @@ public class Runtime {
 
     // Event emission methods
     public static void EmitDebug(String guid, String name, Object message) throws RuntimeNotInitializedException {
+        if (cliMode) {
+            byte[] msgBytes = Serialize(message);
+            System.err.printf("[debug] %s: %s%n", name,
+                    msgBytes != null ? new String(msgBytes, StandardCharsets.UTF_8) : "");
+            return;
+        }
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -338,6 +357,8 @@ public class Runtime {
     }
 
     public static void EmitOutput(String guid, byte[] output, int port) throws RuntimeNotInitializedException {
+        if (cliMode) return;
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -351,6 +372,8 @@ public class Runtime {
     }
 
     public static void EmitInput(String guid, byte[] input) throws RuntimeNotInitializedException {
+        if (cliMode) return;
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -363,6 +386,11 @@ public class Runtime {
     }
 
     public static void EmitError(String guid, String name, String message) throws RuntimeNotInitializedException {
+        if (cliMode) {
+            System.err.printf("[error] %s: %s%n", name, message);
+            return;
+        }
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -376,6 +404,8 @@ public class Runtime {
     }
 
     public static void EmitFlowEvent(String guid, String name) throws RuntimeNotInitializedException {
+        if (cliMode) return;
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
@@ -477,6 +507,8 @@ public class Runtime {
 
     // Running state
     public static boolean IsRunning() throws RuntimeNotInitializedException {
+        if (cliMode) return true;
+
         if (client == null)
             throw new RuntimeNotInitializedException();
 
