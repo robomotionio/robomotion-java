@@ -42,6 +42,58 @@ public class App {
 		try {
 			if (args.length > 0) { // start with arg
 				String arg = args[0];
+
+				// Handle --session-close=<id> or --session-close <id>
+				if (arg.startsWith("--session-close")) {
+					int eqIdx = arg.indexOf('=');
+					String sessionID;
+					if (eqIdx >= 0) {
+						sessionID = arg.substring(eqIdx + 1);
+					} else if (args.length > 1) {
+						sessionID = args[1];
+					} else {
+						System.err.println("--session-close requires a session ID");
+						System.exit(1);
+						return;
+					}
+					CLISession.closeSession(sessionID);
+					return;
+				}
+
+				// Handle --session-daemon <id> (internal: invoked by startDaemonProcess)
+				if (arg.equals("--session-daemon")) {
+					if (args.length < 2) {
+						System.err.println("--session-daemon requires a session ID");
+						System.exit(1);
+						return;
+					}
+					String sessionID = args[1];
+					java.util.Map<String, String> daemonFlags;
+					try {
+						daemonFlags = CLI.parseFlags(args, 2);
+					} catch (Exception e) {
+						daemonFlags = java.util.Map.of();
+					}
+					long timeout = CLISession.parseSessionTimeout(daemonFlags.get("session-timeout"));
+					String vaultID = daemonFlags.get("vault-id");
+					String itemID = daemonFlags.get("item-id");
+					CLISession.runDaemon(sessionID, timeout, vaultID, itemID);
+					return;
+				}
+
+				// CLI-specific flags
+				if (arg.equals("--list-commands") || arg.equals("--skill-md") ||
+					arg.equals("--help") || arg.equals("-h")) {
+					CLI.run(args);
+					return;
+				}
+
+				// CLI command mode: first arg doesn't start with '-'
+				if (!arg.startsWith("-")) {
+					CLI.run(args);
+					return;
+				}
+
 				config = ReadConfigFile();
 
 				String name = config.get("name").toString();
@@ -122,7 +174,7 @@ public class App {
 		 */
 	}
 
-	private static JSONObject ReadConfigFile() throws Exception {
+	static JSONObject ReadConfigFile() throws Exception {
 		FileReader reader;
 		if (Files.exists(Paths.get("config.json")))
 			reader = new FileReader("config.json");

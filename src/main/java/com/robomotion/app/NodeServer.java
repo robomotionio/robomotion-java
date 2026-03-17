@@ -139,7 +139,7 @@ public class NodeServer extends NodeImplBase
 			responseObserver.onCompleted();
 			
 			Runtime.activeNodes--;
-			if (Runtime.activeNodes == 0) App.latch.countDown();
+			if (Runtime.activeNodes == 0 && !Runtime.sessionMode) App.latch.countDown();
 		}
 		catch (Exception e) {
 			RpcError err;
