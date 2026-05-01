@@ -20,6 +20,7 @@ import com.robomotion.app.FieldAnnotations.ECategory;
 import com.robomotion.app.Runtime.InVariable;
 import com.robomotion.app.Runtime.OutVariable;
 import com.robomotion.app.Runtime.OptVariable;
+import com.robomotion.app.Runtime.Variable;
 import com.robomotion.app.Runtime.Credential;
 
 public class Spec {
@@ -784,9 +785,15 @@ public class Spec {
 		Field[] all = c.getFields();
 
 		for (Field f : all) {
-			if (IsInput(f) && !(f.getGenericType() instanceof ParameterizedType)) {
-				fields.add(f);
+			if (!IsInput(f)) continue;
+			// Exclude InVariable/OutVariable/OptVariable (handled by GetInputVars),
+			// but allow other generic types (e.g. List<>, Map<>) declared with @Input.
+			java.lang.reflect.Type t = f.getGenericType();
+			if (t instanceof ParameterizedType) {
+				Class<?> raw = (Class<?>) ((ParameterizedType) t).getRawType();
+				if (Variable.class.isAssignableFrom(raw)) continue;
 			}
+			fields.add(f);
 		}
 
 		return fields;
@@ -815,9 +822,15 @@ public class Spec {
 		Field[] all = c.getFields();
 
 		for (Field f : all) {
-			if (IsOutput(f) && !(f.getGenericType() instanceof ParameterizedType)) {
-				fields.add(f);
+			if (!IsOutput(f)) continue;
+			// Exclude InVariable/OutVariable/OptVariable (handled by GetOutputVars),
+			// but allow other generic types (e.g. List<>, Map<>) declared with @Output.
+			java.lang.reflect.Type t = f.getGenericType();
+			if (t instanceof ParameterizedType) {
+				Class<?> raw = (Class<?>) ((ParameterizedType) t).getRawType();
+				if (Variable.class.isAssignableFrom(raw)) continue;
 			}
+			fields.add(f);
 		}
 
 		return fields;
@@ -846,9 +859,15 @@ public class Spec {
 		Field[] all = c.getFields();
 
 		for (Field f : all) {
-			if (IsOption(f) && !(f.getGenericType() instanceof ParameterizedType)) {
-				fields.add(f);
+			if (!IsOption(f)) continue;
+			// Exclude InVariable/OutVariable/OptVariable (handled by GetOptionVars),
+			// but allow other generic types (e.g. List<>, Map<>) declared with @Option.
+			java.lang.reflect.Type t = f.getGenericType();
+			if (t instanceof ParameterizedType) {
+				Class<?> raw = (Class<?>) ((ParameterizedType) t).getRawType();
+				if (Variable.class.isAssignableFrom(raw)) continue;
 			}
+			fields.add(f);
 		}
 
 		return fields;
