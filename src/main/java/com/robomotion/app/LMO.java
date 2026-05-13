@@ -259,15 +259,7 @@ public class LMO {
 
         if (isBlobRef(obj)) {
             try {
-                JsonElement resolved = resolveRef(obj);
-                // Recurse into the resolved content so nested BlobRef
-                // envelopes (left by pack's extractObject !modified
-                // whole-pack branch on an outer container) are also
-                // unwrapped. Without this, the inner ref surfaces to
-                // user code as a stub object and crashes with
-                // ClassCastException downstream.
-                JsonElement nested = resolveValue(resolved);
-                return nested != null ? nested : resolved;
+                return resolveRef(obj);
             } catch (Exception e) {
                 System.err.println("lmo: failed to resolve blob: " + e.getMessage());
                 return null;
