@@ -859,8 +859,42 @@ class LMOTest {
             String packedStr = new String(LMO.pack(json.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
             assertTrue(packedStr.contains("\"__type\":\"string\""));
             assertTrue(packedStr.contains("\"__len\":" + content.length()));
-            assertTrue(packedStr.contains("\"__size\""));
+            // __size is the UTF-8 byte count of the raw JSON-serialized value
+            // (the string plus surrounding quotes). Wire contract across SDKs.
+            int expectedSize = ("\"" + content + "\"").getBytes(StandardCharsets.UTF_8).length;
+            assertTrue(packedStr.contains("\"__size\":" + expectedSize),
+                "expected __size=" + expectedSize + " in: " + packedStr);
             assertTrue(packedStr.contains("\"__path\":\"" + STORE_PATH + "\""));
+        }
+
+        // Pack contract: a nested {"outer":{"inner": bigStr}} payload must be
+        // either fully resolved at pack time (inner emerges as a BlobRef
+        // envelope) or have its outer container packed as a whole blob.
+        // The customer's iter-17 bug came from packing outer-as-whole without
+        // recursing into resolve later, so this test pins the pack-side
+        // half of the contract.
+        @Test
+        void packRecursivelyExtractsInnerOrPacksOuter() throws Exception {
+            String big = "I".repeat(LMO.THRESHOLD + 100);
+            String json = "{\"outer\":{\"inner\":\"" + big + "\"}}";
+            byte[] packed = LMO.pack(json.getBytes(StandardCharsets.UTF_8));
+            com.google.gson.JsonObject root = com.google.gson.JsonParser
+                .parseString(new String(packed, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            com.google.gson.JsonElement outer = root.get("outer");
+            assertNotNull(outer);
+            assertTrue(outer.isJsonObject(), "outer should be an object");
+            com.google.gson.JsonObject outerObj = outer.getAsJsonObject();
+            if (LMO.isBlobRef(outerObj)) {
+                // outer extracted as whole blob — valid branch
+                assertEquals("object", outerObj.get("__type").getAsString());
+            } else {
+                // inner must be a BlobRef envelope
+                com.google.gson.JsonElement inner = outerObj.get("inner");
+                assertNotNull(inner);
+                assertTrue(inner.isJsonObject() && LMO.isBlobRef(inner.getAsJsonObject()),
+                    "inner should be a BlobRef when outer is left inline; got: " + inner);
+            }
         }
 
         @Test
