@@ -9,10 +9,13 @@ import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import net.openhft.hashing.LongTupleHashFunction;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 
 /**
@@ -311,19 +314,52 @@ public class LMO {
 
     /**
      * Stores data as a zstd-compressed blob and returns its XXH3-128 ref.
-     * If the blob already exists (dedup), it skips writing.
+     *
+     * <p>If a non-empty blob already exists at the target path, dedup skips
+     * writing.
+     *
+     * <p>Atomic write: compressed bytes go to a unique tmp file in the same
+     * directory then are moved onto the final path with ATOMIC_MOVE
+     * (rename(2) on POSIX, MoveFileEx on Windows). On filesystems that don't
+     * support atomic moves (e.g. some FUSE/SMB volumes) we fall back to a
+     * non-atomic REPLACE_EXISTING move. This eliminates the race where a
+     * concurrent reader observes the file mid-write and either dedup-skips
+     * with partial bytes or reads truncated content — surfacing upstream as a
+     * zstd "unexpected EOF" decompress error.
+     *
+     * <p>Dedup verifies the existing file is non-empty before trusting it. A
+     * zero-byte file (left by a prior crash before this fix, or by an
+     * unrelated tool) is rewritten rather than honored.
      */
     static String putBlob(byte[] data) throws Exception {
         String ref = hashRef(data);
 
         Path p = blobPath(ref);
-        if (Files.exists(p)) {
-            return ref; // already exists
+        if (Files.exists(p) && Files.size(p) > 0) {
+            return ref; // already exists, non-empty — trust it
         }
 
-        Files.createDirectories(p.getParent());
+        Path dir = p.getParent();
+        Files.createDirectories(dir);
         byte[] compressed = Zstd.compress(data);
-        Files.write(p, compressed);
+
+        Path tmp = Files.createTempFile(dir, ".tmp-", "");
+        try {
+            Files.write(tmp, compressed);
+            try {
+                Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                // Some filesystems (FUSE/SMB on Windows, certain network
+                // mounts on Linux) reject ATOMIC_MOVE. Fall back to
+                // REPLACE_EXISTING — still safer than the pre-fix non-atomic
+                // write because the destination either has the previous
+                // content or the new content, never partial.
+                Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* best-effort */ }
+            throw e;
+        }
 
         return ref;
     }

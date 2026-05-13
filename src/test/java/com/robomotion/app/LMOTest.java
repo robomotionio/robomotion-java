@@ -15,6 +15,9 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -1023,6 +1026,84 @@ class LMOTest {
             byte[] packed = LMO.pack(original);
             byte[] resolved = LMO.resolveAll(packed);
             assertTrue(new String(resolved, StandardCharsets.UTF_8).contains(inner));
+        }
+    }
+
+    /**
+     * Pin the atomic-write fix: putBlob must use a tmp file + atomic rename,
+     * and dedup must require size > 0. Pre-fix used Files.write directly,
+     * leaving the destination at zero/partial size while bytes were flushed,
+     * and dedup-trusted any path that existed (including a zero-byte
+     * leftover from a crashed prior writer).
+     */
+    @Nested
+    class PutBlobAtomicWrite {
+
+        @Test
+        void concurrentSameContentNoShortReads() throws Exception {
+            initTestStore();
+
+            // Use uncompressible random bytes so the zstd-encoded payload
+            // stays large and the write spans multiple syscalls.
+            byte[] data = new byte[512 * 1024];
+            new Random(0xfa1cL).nextBytes(data);
+
+            final int writers = 16;
+            final int iterations = 200;
+            final ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
+            final CountDownLatch start = new CountDownLatch(1);
+            final CountDownLatch done = new CountDownLatch(writers);
+
+            for (int w = 0; w < writers; w++) {
+                Thread t = new Thread(() -> {
+                    try {
+                        start.await();
+                        for (int i = 0; i < iterations; i++) {
+                            String ref = LMO.putBlob(data);
+                            byte[] got = LMO.getBlob(ref, STORE_PATH);
+                            if (got.length != data.length) {
+                                throw new AssertionError(
+                                    "short read: got " + got.length + " bytes, want " + data.length);
+                            }
+                        }
+                    } catch (Throwable e) {
+                        errors.add(e);
+                    } finally {
+                        done.countDown();
+                    }
+                });
+                t.setDaemon(true);
+                t.start();
+            }
+
+            start.countDown();
+            done.await();
+
+            assertTrue(errors.isEmpty(),
+                "concurrent putBlob/getBlob race produced errors: " + errors);
+        }
+
+        @Test
+        void rewritesZeroByteLeftover() throws Exception {
+            initTestStore();
+
+            byte[] data = "\"recover from leftover\"".getBytes(StandardCharsets.UTF_8);
+            String ref = LMO.hashRef(data);
+
+            // Plant a zero-byte file at the destination, simulating a crashed
+            // prior putBlob from before the atomic-write fix.
+            Path planted = blobFilePath(ref);
+            Files.createDirectories(planted.getParent());
+            Files.write(planted, new byte[0]);
+            assertEquals(0L, Files.size(planted), "setup: planted file should be zero-bytes");
+
+            String gotRef = LMO.putBlob(data);
+            assertEquals(ref, gotRef);
+
+            assertTrue(Files.size(planted) > 0,
+                "post-fix: planted zero-byte file should have been overwritten");
+            byte[] roundtrip = LMO.getBlob(ref, STORE_PATH);
+            assertArrayEquals(data, roundtrip);
         }
     }
 }
