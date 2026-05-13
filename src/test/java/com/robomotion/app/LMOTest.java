@@ -943,6 +943,15 @@ class LMOTest {
             assertNonLatinPackedMetadata("日", 3, 1400);
         }
 
+        // Non-BMP fixture. String.length() would give 2200 (UTF-16 surrogate
+        // pairs); production uses codePointCount() which gives 1100. This
+        // test is the one that would fail if anyone "simplifies" to length().
+        @Test
+        void packedEmojiStringHasCorrectLenAndSize() throws Exception {
+            // U+1F600 GRINNING FACE — 4 bytes UTF-8. 1100 × 4 = 4400 > THRESHOLD.
+            assertNonLatinPackedMetadata("😀", 4, 1100);
+        }
+
         private void assertNonLatinPackedMetadata(String character, int charBytes, int count) throws Exception {
             String content = character.repeat(count);
             int byteLen = content.getBytes(StandardCharsets.UTF_8).length;
