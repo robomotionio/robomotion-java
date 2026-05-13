@@ -2,7 +2,6 @@ package com.robomotion.app;
 
 import com.github.luben.zstd.Zstd;
 import com.google.gson.Gson;
-import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
@@ -252,24 +251,6 @@ public class LMO {
      * Resolves a single JSON value. Returns the resolved element if changed, null otherwise.
      */
     private static JsonElement resolveValue(JsonElement value) {
-        // Recurse into arrays so a BlobRef envelope sitting as an array
-        // element (e.g. user code did arr.add(msg.alreadyPackedField) and
-        // arr later crossed the LMO threshold and got packed whole) is
-        // also unwrapped. Without this the inner envelope surfaces to
-        // user code as a stub object and crashes with ClassCastException.
-        if (value.isJsonArray()) {
-            JsonArray arr = value.getAsJsonArray();
-            boolean modified = false;
-            for (int i = 0; i < arr.size(); i++) {
-                JsonElement resolved = resolveValue(arr.get(i));
-                if (resolved != null) {
-                    arr.set(i, resolved);
-                    modified = true;
-                }
-            }
-            return modified ? arr : null;
-        }
-
         if (!value.isJsonObject()) {
             return null;
         }
