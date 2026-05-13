@@ -921,6 +921,58 @@ class LMOTest {
             String packedStr = new String(LMO.pack(sb.toString().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
             assertTrue(packedStr.contains("\"__type\":\"object\""));
         }
+
+        // Pin: BlobRef envelope metadata for non-Latin (multi-byte UTF-8)
+        // string content. The wire contract every SDK + the robot must
+        // agree on:
+        //   - __len = code-point count (s.codePointCount), NOT String.length()
+        //     (which counts UTF-16 code units) and NOT the byte count.
+        //   - __size = raw UTF-8 byte count of Gson's serialization (preserved
+        //     UTF-8, NOT escaped form like İ).
+        // Multi-byte fixtures make these distinctions visible. Customer
+        // payload is Turkish (Acme); Japanese covers 3-byte UTF-8.
+        @Test
+        void packedTurkishStringHasCorrectLenAndSize() throws Exception {
+            // U+0130 — 2 bytes UTF-8. 2050 × 2 = 4100 > THRESHOLD.
+            assertNonLatinPackedMetadata("İ", 2, 2050);
+        }
+
+        @Test
+        void packedJapaneseStringHasCorrectLenAndSize() throws Exception {
+            // U+65E5 — 3 bytes UTF-8. 1400 × 3 = 4200 > THRESHOLD.
+            assertNonLatinPackedMetadata("日", 3, 1400);
+        }
+
+        private void assertNonLatinPackedMetadata(String character, int charBytes, int count) throws Exception {
+            String content = character.repeat(count);
+            int byteLen = content.getBytes(StandardCharsets.UTF_8).length;
+            int codePointCount = content.codePointCount(0, content.length());
+
+            // Fixture invariant: bytes != code points, both > THRESHOLD.
+            assertEquals(charBytes * count, byteLen, "fixture byte invariant broken");
+            assertEquals(count, codePointCount, "fixture code-point invariant broken");
+            assertTrue(byteLen >= LMO.THRESHOLD, "fixture too small: " + byteLen + " < " + LMO.THRESHOLD);
+
+            String json = "{\"data\":\"" + content + "\"}";
+            byte[] packed = LMO.pack(json.getBytes(StandardCharsets.UTF_8));
+            JsonObject root = JsonParser
+                .parseString(new String(packed, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            JsonObject blob = root.getAsJsonObject("data");
+
+            assertTrue(LMO.isBlobRef(blob), "data should be a BlobRef envelope");
+            assertEquals("string", blob.get("__type").getAsString());
+            // __len is code-point count; for BMP chars equals String.length() but
+            // the test pins the contract so non-BMP fixtures (emoji etc.) would
+            // catch a regression.
+            assertEquals(codePointCount, blob.get("__len").getAsInt(),
+                "__len should be code-point count, not byte or UTF-16 count");
+            // __size is raw UTF-8 byte count of the serialized form
+            // ("<value>" — content + 2 quotes). NOT the escape-form like
+            // İ (which would give 6×count + 2).
+            assertEquals(byteLen + 2, blob.get("__size").getAsInt(),
+                "__size should be raw UTF-8 byte count, not JSON-escape form");
+        }
     }
 
     // -----------------------------------------------------------------------
