@@ -1,6 +1,10 @@
 package com.robomotion.app;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.robomotion.testing.MockContext;
 
 import org.junit.jupiter.api.AfterEach;
@@ -525,13 +529,14 @@ class LMOTest {
             // Step 4: resolveAll — with the fix, no surviving stub.
             byte[] resolved = LMO.resolveAll(packed);
             String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
-            // Crude scan: count __magic occurrences. Should be 0 if fully resolved.
-            int magicCount = 0;
-            int idx = 0;
-            while ((idx = resolvedStr.indexOf("__magic", idx)) != -1) { magicCount++; idx++; }
-            assertEquals(0, magicCount,
+            // Tree-walking scan: detects BlobRef envelopes by structure
+            // (__magic == 20260301 + __ref string), not by literal substring,
+            // so user data containing the literal "__magic" cannot false-fail.
+            String survivingPath = findSurvivingBlobRefPath(resolved);
+            assertNull(survivingPath,
                 "NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
-                + "resolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
+                + "surviving path: " + survivingPath
+                + "\nresolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
         }
 
         /**
@@ -571,12 +576,63 @@ class LMOTest {
             byte[] resolved = LMO.resolveAll(packed);
             String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
 
-            int magicCount = 0;
-            int idx = 0;
-            while ((idx = resolvedStr.indexOf("__magic", idx)) != -1) { magicCount++; idx++; }
-            assertEquals(0, magicCount,
+            String survivingPath = findSurvivingBlobRefPath(resolved);
+            assertNull(survivingPath,
                 "ARRAY-NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
-                + "resolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
+                + "surviving path: " + survivingPath
+                + "\nresolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Test helpers — structural scan for surviving BlobRef envelopes.
+    // Walks the parsed JSON tree and returns the dot-path of the first
+    // element that has the BlobRef shape (__magic == 20260301 + __ref
+    // string). Returns null if no surviving envelope is found.
+    //
+    // This is preferable to a string indexOf("__magic") scan because user
+    // data can legitimately contain the literal "__magic" without being a
+    // BlobRef envelope.
+    // -------------------------------------------------------------------
+
+    private static String findSurvivingBlobRefPath(byte[] data) {
+        try {
+            JsonElement root = JsonParser.parseString(new String(data, StandardCharsets.UTF_8));
+            return findSurvivingBlobRefPath(root, "");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String findSurvivingBlobRefPath(JsonElement el, String path) {
+        if (el == null || el.isJsonNull()) return null;
+        if (el.isJsonObject()) {
+            JsonObject obj = el.getAsJsonObject();
+            if (isBlobRefShape(obj)) return path.isEmpty() ? "<root>" : path;
+            for (Map.Entry<String, JsonElement> e : obj.entrySet()) {
+                String childPath = path.isEmpty() ? e.getKey() : path + "." + e.getKey();
+                String found = findSurvivingBlobRefPath(e.getValue(), childPath);
+                if (found != null) return found;
+            }
+        } else if (el.isJsonArray()) {
+            JsonArray arr = el.getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                String childPath = path.isEmpty() ? Integer.toString(i) : path + "." + i;
+                String found = findSurvivingBlobRefPath(arr.get(i), childPath);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isBlobRefShape(JsonObject obj) {
+        if (!obj.has("__magic") || !obj.has("__ref")) return false;
+        try {
+            long magic = obj.get("__magic").getAsLong();
+            String ref = obj.get("__ref").getAsString();
+            return magic == 20260301L && ref != null && !ref.isEmpty();
+        } catch (Exception e) {
+            return false;
         }
     }
 
