@@ -350,10 +350,15 @@ public class LMO {
                 Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
             } catch (AtomicMoveNotSupportedException e) {
                 // Some filesystems (FUSE/SMB on Windows, certain network
-                // mounts on Linux) reject ATOMIC_MOVE. Fall back to
-                // REPLACE_EXISTING — still safer than the pre-fix non-atomic
-                // write because the destination either has the previous
-                // content or the new content, never partial.
+                // mounts on Linux) reject ATOMIC_MOVE. Best-effort fallback
+                // to REPLACE_EXISTING. Note this is NOT atomically safe on
+                // all FUSE implementations — REPLACE_EXISTING may delete
+                // then create on some FUSE drivers, leaving a brief window
+                // where the destination doesn't exist or is partial. It is
+                // still narrower than the pre-fix in-place write, but cannot
+                // give a hard atomicity guarantee on these filesystems.
+                // Customers running on local NTFS/ext4/APFS get full atomicity
+                // via the primary ATOMIC_MOVE path above and never reach this.
                 Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (Exception e) {
