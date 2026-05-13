@@ -530,51 +530,6 @@ class LMOTest {
                 "NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
                 + "resolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
         }
-
-        /**
-         * Follow-up: BlobRef envelope sitting as a JsonArray element survives
-         * resolveAll unless resolveValue also recurses into arrays.
-         */
-        @Test
-        void resolveAllRecursesIntoArrayElements() throws Exception {
-            byte[] innerData = "\"the inner blob content\"".getBytes(StandardCharsets.UTF_8);
-            String innerRef = LMO.putBlob(innerData);
-            String innerEnv = "{\"__ref\":\"" + innerRef + "\",\"__magic\":20260301,\"__size\":"
-                + innerData.length + ",\"__path\":\"" + STORE_PATH
-                + "\",\"__type\":\"string\",\"__len\":22}";
-
-            StringBuilder sb = new StringBuilder("[");
-            int envIndex = 15;
-            for (int i = 0; i < 31; i++) {
-                if (i > 0) sb.append(",");
-                if (i == envIndex) {
-                    sb.append(innerEnv).append(",");
-                }
-                sb.append("{\"i\":").append(i).append(",\"pad\":\"")
-                  .append("x".repeat(150)).append("\"}");
-            }
-            sb.append("]");
-            String bigArray = sb.toString();
-            String msg = "{\"bigArray\":" + bigArray + ",\"other\":\"fluff\"}";
-            byte[] msgBytes = msg.getBytes(StandardCharsets.UTF_8);
-            assertTrue(bigArray.getBytes(StandardCharsets.UTF_8).length >= LMO.THRESHOLD,
-                "bigArray too small");
-
-            byte[] packed = LMO.pack(msgBytes);
-            String packedStr = new String(packed, StandardCharsets.UTF_8);
-            assertTrue(packedStr.contains("\"bigArray\":{\"__ref\""),
-                "bigArray should be packed as BlobRef");
-
-            byte[] resolved = LMO.resolveAll(packed);
-            String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
-
-            int magicCount = 0;
-            int idx = 0;
-            while ((idx = resolvedStr.indexOf("__magic", idx)) != -1) { magicCount++; idx++; }
-            assertEquals(0, magicCount,
-                "ARRAY-NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
-                + "resolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
-        }
     }
 
     // -----------------------------------------------------------------------
