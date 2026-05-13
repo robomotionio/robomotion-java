@@ -2,16 +2,20 @@ package com.robomotion.app;
 
 import com.github.luben.zstd.Zstd;
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.JsonPrimitive;
 import net.openhft.hashing.LongTupleHashFunction;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.Map;
 
 /**
@@ -251,6 +255,24 @@ public class LMO {
      * Resolves a single JSON value. Returns the resolved element if changed, null otherwise.
      */
     private static JsonElement resolveValue(JsonElement value) {
+        // Recurse into arrays so a BlobRef envelope sitting as an array
+        // element (e.g. user code did arr.add(msg.alreadyPackedField) and
+        // arr later crossed the LMO threshold and got packed whole) is
+        // also unwrapped. Without this the inner envelope surfaces to
+        // user code as a stub object and crashes with ClassCastException.
+        if (value.isJsonArray()) {
+            JsonArray arr = value.getAsJsonArray();
+            boolean modified = false;
+            for (int i = 0; i < arr.size(); i++) {
+                JsonElement resolved = resolveValue(arr.get(i));
+                if (resolved != null) {
+                    arr.set(i, resolved);
+                    modified = true;
+                }
+            }
+            return modified ? arr : null;
+        }
+
         if (!value.isJsonObject()) {
             return null;
         }
@@ -259,7 +281,15 @@ public class LMO {
 
         if (isBlobRef(obj)) {
             try {
-                return resolveRef(obj);
+                JsonElement resolved = resolveRef(obj);
+                // Recurse into the resolved content so nested BlobRef
+                // envelopes (left by pack's extractObject !modified
+                // whole-pack branch on an outer container) are also
+                // unwrapped. Without this, the inner ref surfaces to
+                // user code as a stub object and crashes with
+                // ClassCastException downstream.
+                JsonElement nested = resolveValue(resolved);
+                return nested != null ? nested : resolved;
             } catch (Exception e) {
                 System.err.println("lmo: failed to resolve blob: " + e.getMessage());
                 return null;
@@ -284,19 +314,57 @@ public class LMO {
 
     /**
      * Stores data as a zstd-compressed blob and returns its XXH3-128 ref.
-     * If the blob already exists (dedup), it skips writing.
+     *
+     * <p>If a non-empty blob already exists at the target path, dedup skips
+     * writing.
+     *
+     * <p>Atomic write: compressed bytes go to a unique tmp file in the same
+     * directory then are moved onto the final path with ATOMIC_MOVE
+     * (rename(2) on POSIX, MoveFileEx on Windows). On filesystems that don't
+     * support atomic moves (e.g. some FUSE/SMB volumes) we fall back to a
+     * non-atomic REPLACE_EXISTING move. This eliminates the race where a
+     * concurrent reader observes the file mid-write and either dedup-skips
+     * with partial bytes or reads truncated content — surfacing upstream as a
+     * zstd "unexpected EOF" decompress error.
+     *
+     * <p>Dedup verifies the existing file is non-empty before trusting it. A
+     * zero-byte file (left by a prior crash before this fix, or by an
+     * unrelated tool) is rewritten rather than honored.
      */
     static String putBlob(byte[] data) throws Exception {
         String ref = hashRef(data);
 
         Path p = blobPath(ref);
-        if (Files.exists(p)) {
-            return ref; // already exists
+        if (Files.exists(p) && Files.size(p) > 0) {
+            return ref; // already exists, non-empty — trust it
         }
 
-        Files.createDirectories(p.getParent());
+        Path dir = p.getParent();
+        Files.createDirectories(dir);
         byte[] compressed = Zstd.compress(data);
-        Files.write(p, compressed);
+
+        Path tmp = Files.createTempFile(dir, ".tmp-", "");
+        try {
+            Files.write(tmp, compressed);
+            try {
+                Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                // Some filesystems (FUSE/SMB on Windows, certain network
+                // mounts on Linux) reject ATOMIC_MOVE. Best-effort fallback
+                // to REPLACE_EXISTING. Note this is NOT atomically safe on
+                // all FUSE implementations — REPLACE_EXISTING may delete
+                // then create on some FUSE drivers, leaving a brief window
+                // where the destination doesn't exist or is partial. It is
+                // still narrower than the pre-fix in-place write, but cannot
+                // give a hard atomicity guarantee on these filesystems.
+                // Customers running on local NTFS/ext4/APFS get full atomicity
+                // via the primary ATOMIC_MOVE path above and never reach this.
+                Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } catch (Exception e) {
+            try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* best-effort */ }
+            throw e;
+        }
 
         return ref;
     }

@@ -1,6 +1,10 @@
 package com.robomotion.app;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
 import com.robomotion.testing.MockContext;
 
 import org.junit.jupiter.api.AfterEach;
@@ -15,6 +19,9 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -448,6 +455,185 @@ class LMOTest {
             byte[] arr = "[1,2,3]".getBytes(StandardCharsets.UTF_8);
             assertSame(arr, LMO.resolveAll(arr));
         }
+
+        /**
+         * Pins the customer's iter-17 failure pattern.
+         *
+         * When Pack's extractObject !modified branch packs an outer
+         * container as a single blob (because the container is large
+         * but no child reaches threshold), the blob preserves any
+         * pre-existing BlobRef envelopes inside. Without recursive
+         * resolveValue, those nested refs survive resolveAll and
+         * surface to user code as a stub object, crashing with
+         * ClassCastException / "is not an array" downstream.
+         */
+        @Test
+        void resolveAllRecursivelyUnwrapsNestedBlobRefs() throws Exception {
+            // Step 1: pack response array as a BlobRef.
+            StringBuilder rsb = new StringBuilder("[");
+            for (int i = 0; i < 16; i++) {
+                if (i > 0) rsb.append(",");
+                rsb.append("{\"raw\":\"").append("X".repeat(680))
+                   .append("\",\"sgkSicil\":\"s\",\"sirketAdi\":\"ihl\",\"sonucKod\":\"0\"}");
+            }
+            rsb.append("]");
+            byte[] respArr = rsb.toString().getBytes(StandardCharsets.UTF_8);
+            String respRef = LMO.putBlob(respArr);
+            String respEnv = "{\"__ref\":\"" + respRef + "\",\"__magic\":20260301,\"__size\":"
+                + respArr.length + ",\"__path\":\"" + STORE_PATH
+                + "\",\"__type\":\"array\",\"__len\":16}";
+
+            // Step 2: build msg shape where api > 4 KB but no child crosses 4 KB.
+            StringBuilder lsb = new StringBuilder("[");
+            for (int i = 0; i < 16; i++) {
+                if (i > 0) lsb.append(",");
+                lsb.append("{\"sirketAdi\":\"ACME CORP TEST FIRM A.Ş.\",")
+                   .append("\"sgkSicil\":\"0.0000.00.00\",\"isyeriKodu\":\"x\",")
+                   .append("\"kullaniciAdi\":\"u\",\"isyeriSifresi\":\"p\",")
+                   .append("\"token\":\"00000000-0000-0000-0000-000000000000\"}");
+            }
+            lsb.append("]");
+            String loginSuccess = lsb.toString();
+            String wsLogin = "{\"response\":" + respEnv + ",\"loginSuccess\":" + loginSuccess
+                + ",\"loginFailed\":[]}";
+
+            StringBuilder msb = new StringBuilder("[");
+            for (int i = 0; i < 5; i++) {
+                if (i > 0) msb.append(",");
+                msb.append("{\"sirketAdi\":\"İACME\",\"sgkSicil\":\"0.0000\",\"note\":\"")
+                   .append("y".repeat(100)).append("\"}");
+            }
+            msb.append("]");
+            String medium = msb.toString();
+            String api = "{\"wsLogin\":" + wsLogin
+                + ",\"raporAramaTarihile\":{\"response\":" + medium
+                + ",\"failedResponses\":[],\"noReports\":[],\"Reports\":[]}"
+                + ",\"raporOnay\":{\"response\":" + medium
+                + ",\"confirmedReports\":[],\"reportsNotConfirmed\":[]}"
+                + ",\"raporOkunduKapat\":{\"response\":" + medium
+                + ",\"reportsNotClosed\":[]}}";
+            String msg = "{\"constants\":{\"api\":" + api + ",\"urls\":{}}}";
+            byte[] msgBytes = msg.getBytes(StandardCharsets.UTF_8);
+
+            assertTrue(api.getBytes(StandardCharsets.UTF_8).length >= LMO.THRESHOLD,
+                "api too small for whole-pack precondition");
+            assertTrue(wsLogin.getBytes(StandardCharsets.UTF_8).length < LMO.THRESHOLD,
+                "wsLogin too big for whole-pack precondition");
+
+            // Step 3: Pack — api should be packed whole.
+            byte[] packed = LMO.pack(msgBytes);
+            String packedStr = new String(packed, StandardCharsets.UTF_8);
+            assertTrue(packedStr.contains("\"api\":{\"__ref\""),
+                "api should have been packed as a BlobRef envelope; packed=" + packedStr.substring(0, Math.min(200, packedStr.length())));
+
+            // Step 4: resolveAll — with the fix, no surviving stub.
+            byte[] resolved = LMO.resolveAll(packed);
+            String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
+            // Tree-walking scan: detects BlobRef envelopes by structure
+            // (__magic == 20260301 + __ref string), not by literal substring,
+            // so user data containing the literal "__magic" cannot false-fail.
+            String survivingPath = findSurvivingBlobRefPath(resolved);
+            assertNull(survivingPath,
+                "NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
+                + "surviving path: " + survivingPath
+                + "\nresolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
+        }
+
+        /**
+         * Follow-up: BlobRef envelope sitting as a JsonArray element survives
+         * resolveAll unless resolveValue also recurses into arrays.
+         */
+        @Test
+        void resolveAllRecursesIntoArrayElements() throws Exception {
+            byte[] innerData = "\"the inner blob content\"".getBytes(StandardCharsets.UTF_8);
+            String innerRef = LMO.putBlob(innerData);
+            String innerEnv = "{\"__ref\":\"" + innerRef + "\",\"__magic\":20260301,\"__size\":"
+                + innerData.length + ",\"__path\":\"" + STORE_PATH
+                + "\",\"__type\":\"string\",\"__len\":22}";
+
+            StringBuilder sb = new StringBuilder("[");
+            int envIndex = 15;
+            for (int i = 0; i < 31; i++) {
+                if (i > 0) sb.append(",");
+                if (i == envIndex) {
+                    sb.append(innerEnv).append(",");
+                }
+                sb.append("{\"i\":").append(i).append(",\"pad\":\"")
+                  .append("x".repeat(150)).append("\"}");
+            }
+            sb.append("]");
+            String bigArray = sb.toString();
+            String msg = "{\"bigArray\":" + bigArray + ",\"other\":\"fluff\"}";
+            byte[] msgBytes = msg.getBytes(StandardCharsets.UTF_8);
+            assertTrue(bigArray.getBytes(StandardCharsets.UTF_8).length >= LMO.THRESHOLD,
+                "bigArray too small");
+
+            byte[] packed = LMO.pack(msgBytes);
+            String packedStr = new String(packed, StandardCharsets.UTF_8);
+            assertTrue(packedStr.contains("\"bigArray\":{\"__ref\""),
+                "bigArray should be packed as BlobRef");
+
+            byte[] resolved = LMO.resolveAll(packed);
+            String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
+
+            String survivingPath = findSurvivingBlobRefPath(resolved);
+            assertNull(survivingPath,
+                "ARRAY-NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
+                + "surviving path: " + survivingPath
+                + "\nresolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // Test helpers — structural scan for surviving BlobRef envelopes.
+    // Walks the parsed JSON tree and returns the dot-path of the first
+    // element that has the BlobRef shape (__magic == 20260301 + __ref
+    // string). Returns null if no surviving envelope is found.
+    //
+    // This is preferable to a string indexOf("__magic") scan because user
+    // data can legitimately contain the literal "__magic" without being a
+    // BlobRef envelope.
+    // -------------------------------------------------------------------
+
+    private static String findSurvivingBlobRefPath(byte[] data) {
+        try {
+            JsonElement root = JsonParser.parseString(new String(data, StandardCharsets.UTF_8));
+            return findSurvivingBlobRefPath(root, "");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static String findSurvivingBlobRefPath(JsonElement el, String path) {
+        if (el == null || el.isJsonNull()) return null;
+        if (el.isJsonObject()) {
+            JsonObject obj = el.getAsJsonObject();
+            if (isBlobRefShape(obj)) return path.isEmpty() ? "<root>" : path;
+            for (Map.Entry<String, JsonElement> e : obj.entrySet()) {
+                String childPath = path.isEmpty() ? e.getKey() : path + "." + e.getKey();
+                String found = findSurvivingBlobRefPath(e.getValue(), childPath);
+                if (found != null) return found;
+            }
+        } else if (el.isJsonArray()) {
+            JsonArray arr = el.getAsJsonArray();
+            for (int i = 0; i < arr.size(); i++) {
+                String childPath = path.isEmpty() ? Integer.toString(i) : path + "." + i;
+                String found = findSurvivingBlobRefPath(arr.get(i), childPath);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isBlobRefShape(JsonObject obj) {
+        if (!obj.has("__magic") || !obj.has("__ref")) return false;
+        try {
+            long magic = obj.get("__magic").getAsLong();
+            String ref = obj.get("__ref").getAsString();
+            return magic == 20260301L && ref != null && !ref.isEmpty();
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -673,8 +859,42 @@ class LMOTest {
             String packedStr = new String(LMO.pack(json.getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
             assertTrue(packedStr.contains("\"__type\":\"string\""));
             assertTrue(packedStr.contains("\"__len\":" + content.length()));
-            assertTrue(packedStr.contains("\"__size\""));
+            // __size is the UTF-8 byte count of the raw JSON-serialized value
+            // (the string plus surrounding quotes). Wire contract across SDKs.
+            int expectedSize = ("\"" + content + "\"").getBytes(StandardCharsets.UTF_8).length;
+            assertTrue(packedStr.contains("\"__size\":" + expectedSize),
+                "expected __size=" + expectedSize + " in: " + packedStr);
             assertTrue(packedStr.contains("\"__path\":\"" + STORE_PATH + "\""));
+        }
+
+        // Pack contract: a nested {"outer":{"inner": bigStr}} payload must be
+        // either fully resolved at pack time (inner emerges as a BlobRef
+        // envelope) or have its outer container packed as a whole blob.
+        // The customer's iter-17 bug came from packing outer-as-whole without
+        // recursing into resolve later, so this test pins the pack-side
+        // half of the contract.
+        @Test
+        void packRecursivelyExtractsInnerOrPacksOuter() throws Exception {
+            String big = "I".repeat(LMO.THRESHOLD + 100);
+            String json = "{\"outer\":{\"inner\":\"" + big + "\"}}";
+            byte[] packed = LMO.pack(json.getBytes(StandardCharsets.UTF_8));
+            com.google.gson.JsonObject root = com.google.gson.JsonParser
+                .parseString(new String(packed, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            com.google.gson.JsonElement outer = root.get("outer");
+            assertNotNull(outer);
+            assertTrue(outer.isJsonObject(), "outer should be an object");
+            com.google.gson.JsonObject outerObj = outer.getAsJsonObject();
+            if (LMO.isBlobRef(outerObj)) {
+                // outer extracted as whole blob — valid branch
+                assertEquals("object", outerObj.get("__type").getAsString());
+            } else {
+                // inner must be a BlobRef envelope
+                com.google.gson.JsonElement inner = outerObj.get("inner");
+                assertNotNull(inner);
+                assertTrue(inner.isJsonObject() && LMO.isBlobRef(inner.getAsJsonObject()),
+                    "inner should be a BlobRef when outer is left inline; got: " + inner);
+            }
         }
 
         @Test
@@ -700,6 +920,67 @@ class LMOTest {
             sb.append("}}");
             String packedStr = new String(LMO.pack(sb.toString().getBytes(StandardCharsets.UTF_8)), StandardCharsets.UTF_8);
             assertTrue(packedStr.contains("\"__type\":\"object\""));
+        }
+
+        // Pin: BlobRef envelope metadata for non-Latin (multi-byte UTF-8)
+        // string content. The wire contract every SDK + the robot must
+        // agree on:
+        //   - __len = code-point count (s.codePointCount), NOT String.length()
+        //     (which counts UTF-16 code units) and NOT the byte count.
+        //   - __size = raw UTF-8 byte count of Gson's serialization (preserved
+        //     UTF-8, NOT escaped form like İ).
+        // Multi-byte fixtures make these distinctions visible. Customer
+        // payload is Turkish (Acme); Japanese covers 3-byte UTF-8.
+        @Test
+        void packedTurkishStringHasCorrectLenAndSize() throws Exception {
+            // U+0130 — 2 bytes UTF-8. 2050 × 2 = 4100 > THRESHOLD.
+            assertNonLatinPackedMetadata("İ", 2, 2050);
+        }
+
+        @Test
+        void packedJapaneseStringHasCorrectLenAndSize() throws Exception {
+            // U+65E5 — 3 bytes UTF-8. 1400 × 3 = 4200 > THRESHOLD.
+            assertNonLatinPackedMetadata("日", 3, 1400);
+        }
+
+        // Non-BMP fixture. String.length() would give 2200 (UTF-16 surrogate
+        // pairs); production uses codePointCount() which gives 1100. This
+        // test is the one that would fail if anyone "simplifies" to length().
+        @Test
+        void packedEmojiStringHasCorrectLenAndSize() throws Exception {
+            // U+1F600 GRINNING FACE — 4 bytes UTF-8. 1100 × 4 = 4400 > THRESHOLD.
+            assertNonLatinPackedMetadata("😀", 4, 1100);
+        }
+
+        private void assertNonLatinPackedMetadata(String character, int charBytes, int count) throws Exception {
+            String content = character.repeat(count);
+            int byteLen = content.getBytes(StandardCharsets.UTF_8).length;
+            int codePointCount = content.codePointCount(0, content.length());
+
+            // Fixture invariant: bytes != code points, both > THRESHOLD.
+            assertEquals(charBytes * count, byteLen, "fixture byte invariant broken");
+            assertEquals(count, codePointCount, "fixture code-point invariant broken");
+            assertTrue(byteLen >= LMO.THRESHOLD, "fixture too small: " + byteLen + " < " + LMO.THRESHOLD);
+
+            String json = "{\"data\":\"" + content + "\"}";
+            byte[] packed = LMO.pack(json.getBytes(StandardCharsets.UTF_8));
+            JsonObject root = JsonParser
+                .parseString(new String(packed, StandardCharsets.UTF_8))
+                .getAsJsonObject();
+            JsonObject blob = root.getAsJsonObject("data");
+
+            assertTrue(LMO.isBlobRef(blob), "data should be a BlobRef envelope");
+            assertEquals("string", blob.get("__type").getAsString());
+            // __len is code-point count; for BMP chars equals String.length() but
+            // the test pins the contract so non-BMP fixtures (emoji etc.) would
+            // catch a regression.
+            assertEquals(codePointCount, blob.get("__len").getAsInt(),
+                "__len should be code-point count, not byte or UTF-16 count");
+            // __size is raw UTF-8 byte count of the serialized form
+            // ("<value>" — content + 2 quotes). NOT the escape-form like
+            // İ (which would give 6×count + 2).
+            assertEquals(byteLen + 2, blob.get("__size").getAsInt(),
+                "__size should be raw UTF-8 byte count, not JSON-escape form");
         }
     }
 
@@ -896,6 +1177,84 @@ class LMOTest {
             byte[] packed = LMO.pack(original);
             byte[] resolved = LMO.resolveAll(packed);
             assertTrue(new String(resolved, StandardCharsets.UTF_8).contains(inner));
+        }
+    }
+
+    /**
+     * Pin the atomic-write fix: putBlob must use a tmp file + atomic rename,
+     * and dedup must require size > 0. Pre-fix used Files.write directly,
+     * leaving the destination at zero/partial size while bytes were flushed,
+     * and dedup-trusted any path that existed (including a zero-byte
+     * leftover from a crashed prior writer).
+     */
+    @Nested
+    class PutBlobAtomicWrite {
+
+        @Test
+        void concurrentSameContentNoShortReads() throws Exception {
+            initTestStore();
+
+            // Use uncompressible random bytes so the zstd-encoded payload
+            // stays large and the write spans multiple syscalls.
+            byte[] data = new byte[512 * 1024];
+            new Random(0xfa1cL).nextBytes(data);
+
+            final int writers = 16;
+            final int iterations = 200;
+            final ConcurrentLinkedQueue<Throwable> errors = new ConcurrentLinkedQueue<>();
+            final CountDownLatch start = new CountDownLatch(1);
+            final CountDownLatch done = new CountDownLatch(writers);
+
+            for (int w = 0; w < writers; w++) {
+                Thread t = new Thread(() -> {
+                    try {
+                        start.await();
+                        for (int i = 0; i < iterations; i++) {
+                            String ref = LMO.putBlob(data);
+                            byte[] got = LMO.getBlob(ref, STORE_PATH);
+                            if (got.length != data.length) {
+                                throw new AssertionError(
+                                    "short read: got " + got.length + " bytes, want " + data.length);
+                            }
+                        }
+                    } catch (Throwable e) {
+                        errors.add(e);
+                    } finally {
+                        done.countDown();
+                    }
+                });
+                t.setDaemon(true);
+                t.start();
+            }
+
+            start.countDown();
+            done.await();
+
+            assertTrue(errors.isEmpty(),
+                "concurrent putBlob/getBlob race produced errors: " + errors);
+        }
+
+        @Test
+        void rewritesZeroByteLeftover() throws Exception {
+            initTestStore();
+
+            byte[] data = "\"recover from leftover\"".getBytes(StandardCharsets.UTF_8);
+            String ref = LMO.hashRef(data);
+
+            // Plant a zero-byte file at the destination, simulating a crashed
+            // prior putBlob from before the atomic-write fix.
+            Path planted = blobFilePath(ref);
+            Files.createDirectories(planted.getParent());
+            Files.write(planted, new byte[0]);
+            assertEquals(0L, Files.size(planted), "setup: planted file should be zero-bytes");
+
+            String gotRef = LMO.putBlob(data);
+            assertEquals(ref, gotRef);
+
+            assertTrue(Files.size(planted) > 0,
+                "post-fix: planted zero-byte file should have been overwritten");
+            byte[] roundtrip = LMO.getBlob(ref, STORE_PATH);
+            assertArrayEquals(data, roundtrip);
         }
     }
 }
