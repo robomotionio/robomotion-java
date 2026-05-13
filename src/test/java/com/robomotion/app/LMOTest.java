@@ -448,6 +448,88 @@ class LMOTest {
             byte[] arr = "[1,2,3]".getBytes(StandardCharsets.UTF_8);
             assertSame(arr, LMO.resolveAll(arr));
         }
+
+        /**
+         * Pins the customer's iter-17 failure pattern.
+         *
+         * When Pack's extractObject !modified branch packs an outer
+         * container as a single blob (because the container is large
+         * but no child reaches threshold), the blob preserves any
+         * pre-existing BlobRef envelopes inside. Without recursive
+         * resolveValue, those nested refs survive resolveAll and
+         * surface to user code as a stub object, crashing with
+         * ClassCastException / "is not an array" downstream.
+         */
+        @Test
+        void resolveAllRecursivelyUnwrapsNestedBlobRefs() throws Exception {
+            // Step 1: pack response array as a BlobRef.
+            StringBuilder rsb = new StringBuilder("[");
+            for (int i = 0; i < 16; i++) {
+                if (i > 0) rsb.append(",");
+                rsb.append("{\"raw\":\"").append("X".repeat(680))
+                   .append("\",\"sgkSicil\":\"s\",\"sirketAdi\":\"ihl\",\"sonucKod\":\"0\"}");
+            }
+            rsb.append("]");
+            byte[] respArr = rsb.toString().getBytes(StandardCharsets.UTF_8);
+            String respRef = LMO.putBlob(respArr);
+            String respEnv = "{\"__ref\":\"" + respRef + "\",\"__magic\":20260301,\"__size\":"
+                + respArr.length + ",\"__path\":\"" + STORE_PATH
+                + "\",\"__type\":\"array\",\"__len\":16}";
+
+            // Step 2: build msg shape where api > 4 KB but no child crosses 4 KB.
+            StringBuilder lsb = new StringBuilder("[");
+            for (int i = 0; i < 16; i++) {
+                if (i > 0) lsb.append(",");
+                lsb.append("{\"sirketAdi\":\"ACME CORP TEST FIRM A.Ş.\",")
+                   .append("\"sgkSicil\":\"0.0000.00.00\",\"isyeriKodu\":\"x\",")
+                   .append("\"kullaniciAdi\":\"u\",\"isyeriSifresi\":\"p\",")
+                   .append("\"token\":\"00000000-0000-0000-0000-000000000000\"}");
+            }
+            lsb.append("]");
+            String loginSuccess = lsb.toString();
+            String wsLogin = "{\"response\":" + respEnv + ",\"loginSuccess\":" + loginSuccess
+                + ",\"loginFailed\":[]}";
+
+            StringBuilder msb = new StringBuilder("[");
+            for (int i = 0; i < 5; i++) {
+                if (i > 0) msb.append(",");
+                msb.append("{\"sirketAdi\":\"İACME\",\"sgkSicil\":\"0.0000\",\"note\":\"")
+                   .append("y".repeat(100)).append("\"}");
+            }
+            msb.append("]");
+            String medium = msb.toString();
+            String api = "{\"wsLogin\":" + wsLogin
+                + ",\"raporAramaTarihile\":{\"response\":" + medium
+                + ",\"failedResponses\":[],\"noReports\":[],\"Reports\":[]}"
+                + ",\"raporOnay\":{\"response\":" + medium
+                + ",\"confirmedReports\":[],\"reportsNotConfirmed\":[]}"
+                + ",\"raporOkunduKapat\":{\"response\":" + medium
+                + ",\"reportsNotClosed\":[]}}";
+            String msg = "{\"constants\":{\"api\":" + api + ",\"urls\":{}}}";
+            byte[] msgBytes = msg.getBytes(StandardCharsets.UTF_8);
+
+            assertTrue(api.getBytes(StandardCharsets.UTF_8).length >= LMO.THRESHOLD,
+                "api too small for whole-pack precondition");
+            assertTrue(wsLogin.getBytes(StandardCharsets.UTF_8).length < LMO.THRESHOLD,
+                "wsLogin too big for whole-pack precondition");
+
+            // Step 3: Pack — api should be packed whole.
+            byte[] packed = LMO.pack(msgBytes);
+            String packedStr = new String(packed, StandardCharsets.UTF_8);
+            assertTrue(packedStr.contains("\"api\":{\"__ref\""),
+                "api should have been packed as a BlobRef envelope; packed=" + packedStr.substring(0, Math.min(200, packedStr.length())));
+
+            // Step 4: resolveAll — with the fix, no surviving stub.
+            byte[] resolved = LMO.resolveAll(packed);
+            String resolvedStr = new String(resolved, StandardCharsets.UTF_8);
+            // Crude scan: count __magic occurrences. Should be 0 if fully resolved.
+            int magicCount = 0;
+            int idx = 0;
+            while ((idx = resolvedStr.indexOf("__magic", idx)) != -1) { magicCount++; idx++; }
+            assertEquals(0, magicCount,
+                "NESTED BLOBREF SURVIVED resolveAll — bug reproduced! "
+                + "resolvedStr=" + resolvedStr.substring(0, Math.min(400, resolvedStr.length())));
+        }
     }
 
     // -----------------------------------------------------------------------
