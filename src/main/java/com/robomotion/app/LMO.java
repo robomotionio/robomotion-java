@@ -11,8 +11,11 @@ import net.openhft.hashing.LongTupleHashFunction;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
@@ -347,7 +350,7 @@ public class LMO {
         try {
             Files.write(tmp, compressed);
             try {
-                Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                moveAtomicWithRetry(tmp, p);
             } catch (AtomicMoveNotSupportedException e) {
                 // Some filesystems (FUSE/SMB on Windows, certain network
                 // mounts on Linux) reject ATOMIC_MOVE. Best-effort fallback
@@ -360,6 +363,17 @@ public class LMO {
                 // Customers running on local NTFS/ext4/APFS get full atomicity
                 // via the primary ATOMIC_MOVE path above and never reach this.
                 Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AccessDeniedException e) {
+                // Windows-specific: another writer beat us to the destination
+                // and readers hold it open without FILE_SHARE_DELETE, so
+                // MoveFileEx cannot replace it. Content is addressed by hash,
+                // so a non-empty file at p has the same bytes we'd write —
+                // accept as dedup win.
+                if (Files.exists(p) && Files.size(p) > 0) {
+                    try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* best-effort */ }
+                    return ref;
+                }
+                throw e;
             }
         } catch (Exception e) {
             try { Files.deleteIfExists(tmp); } catch (IOException ignored) { /* best-effort */ }
@@ -367,6 +381,40 @@ public class LMO {
         }
 
         return ref;
+    }
+
+    /**
+     * Windows-specific share-violation retry for atomic move.
+     *
+     * <p>On Windows MoveFileEx fails with two distinct errors when the
+     * destination is held open by another process without FILE_SHARE_DELETE:
+     * ERROR_ACCESS_DENIED (mapped to AccessDeniedException) when the
+     * incompatible share modes deny the implicit delete, and
+     * ERROR_SHARING_VIOLATION (mapped to plain FileSystemException since
+     * Java has no dedicated subclass) when the destination is mid-CreateFile.
+     * POSIX rename(2) has no such race. We retry both with short exponential
+     * backoff so transient share violations succeed without surfacing as
+     * putBlob errors. AtomicMoveNotSupportedException is excluded so the
+     * caller's REPLACE_EXISTING fallback still fires.
+     */
+    private static void moveAtomicWithRetry(Path tmp, Path p) throws IOException {
+        final int maxAttempts = 16;
+        long backoffMicros = 100;
+        IOException lastErr = null;
+        for (int i = 0; i < maxAttempts; i++) {
+            try {
+                Files.move(tmp, p, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                return;
+            } catch (AtomicMoveNotSupportedException e) {
+                throw e;
+            } catch (FileSystemException e) {
+                lastErr = e;
+                try { Thread.sleep(backoffMicros / 1000, (int) ((backoffMicros % 1000) * 1000)); }
+                catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw e; }
+                backoffMicros = Math.min(backoffMicros * 2, 8000);
+            }
+        }
+        throw lastErr;
     }
 
     /**
@@ -379,8 +427,38 @@ public class LMO {
         String file = hash.substring(2);
 
         Path blobFile = Paths.get(configDir, "store", storePath, "blobs", dir, file);
-        byte[] compressed = Files.readAllBytes(blobFile);
+        byte[] compressed = readBlobWithRetry(blobFile);
         return Zstd.decompress(compressed, (int) Zstd.decompressedSize(compressed));
+    }
+
+    /**
+     * Windows-specific share-violation retry for blob reads.
+     *
+     * <p>On Windows Files.readAllBytes can fail with AccessDeniedException
+     * (ERROR_ACCESS_DENIED) when a writer holds the file with restrictive
+     * share modes, and with plain FileSystemException (ERROR_SHARING_VIOLATION)
+     * when an external process holds the file with FILE_SHARE_NONE — typical
+     * of antivirus scanners and indexing services. Both are transient. POSIX
+     * has no such window. NoSuchFileException is excluded so a real "blob not
+     * present" surfaces immediately.
+     */
+    private static byte[] readBlobWithRetry(Path p) throws IOException {
+        final int maxAttempts = 16;
+        long backoffMicros = 100;
+        IOException lastErr = null;
+        for (int i = 0; i < maxAttempts; i++) {
+            try {
+                return Files.readAllBytes(p);
+            } catch (NoSuchFileException e) {
+                throw e;
+            } catch (FileSystemException e) {
+                lastErr = e;
+                try { Thread.sleep(backoffMicros / 1000, (int) ((backoffMicros % 1000) * 1000)); }
+                catch (InterruptedException ie) { Thread.currentThread().interrupt(); throw e; }
+                backoffMicros = Math.min(backoffMicros * 2, 8000);
+            }
+        }
+        throw lastErr;
     }
 
     // --- Helpers ---
